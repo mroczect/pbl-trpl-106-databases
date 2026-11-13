@@ -1,4 +1,5 @@
 #![allow(unused_crate_dependencies, clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::assertions_on_constants)]
 
 use std::time::Duration;
 
@@ -224,7 +225,7 @@ fn default_page_size_less_than_max_params() {
 
 #[test]
 fn default_page_size_less_than_max_result_rows() {
-    assert!((DEFAULT_PAGE_SIZE as usize) < MAX_RESULT_ROWS);
+    assert!(DEFAULT_PAGE_SIZE < MAX_RESULT_ROWS as u64);
 }
 
 
@@ -275,5 +276,5 @@ fn all_ordering_invariants_hold() {
     assert!(MAX_PARAMS_PER_QUERY < MAX_QUERY_LENGTH);
     assert!((MAX_RESULT_ROWS as u64) < MAX_PAGE_NUMBER);
     assert!(MAX_QUERY_LENGTH > MAX_STRING_FIELD_LENGTH);
-    assert!((DEFAULT_PAGE_SIZE as usize) < MAX_RESULT_ROWS);
+    assert!(DEFAULT_PAGE_SIZE < MAX_RESULT_ROWS as u64);
 }

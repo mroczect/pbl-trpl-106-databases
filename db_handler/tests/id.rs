@@ -14,7 +14,7 @@ struct User;
 struct Product;
 
 
-fn assert_traits_implemented<T>()
+const fn assert_traits_implemented<T>()
 where
     T: Copy
         + Clone
@@ -35,7 +35,7 @@ fn implements_expected_traits() {
     assert_traits_implemented::<Id<Product>>();
 }
 
-fn assert_send_sync<T: Send + Sync>() {}
+const fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
 fn id_is_send_and_sync() {
@@ -335,7 +335,7 @@ fn copy_semantics() {
 #[test]
 fn explicit_clone() {
     let a: Id<User> = Id::new(7);
-    let b = a.clone();
+    let b = a;	
     assert_eq!(a.value(), b.value());
 }
 
@@ -391,16 +391,16 @@ fn ordering_with_equal_values() {
 
 #[test]
 fn sort_uses_numeric_order() {
-    let mut v = vec![
-        Id::<User>::new(3),
-        Id::<User>::new(1),
-        Id::<User>::new(2),
-        Id::<User>::new(-1),
-        Id::<User>::new(0),
-    ];
-    v.sort();
-    let values: Vec<i64> = v.iter().map(|id| id.value()).collect();
-    assert_eq!(values, vec![-1, 0, 1, 2, 3]);
+	let mut v = [
+    Id::<User>::new(3),
+    Id::<User>::new(1),
+    Id::<User>::new(2),
+    Id::<User>::new(-1),
+    Id::<User>::new(0),
+	];
+	v.sort();
+	let values: Vec<i64> = v.iter().map(|id| id.value()).collect();
+	assert_eq!(values, vec![-1, 0, 1, 2, 3]);
 }
 
 #[test]

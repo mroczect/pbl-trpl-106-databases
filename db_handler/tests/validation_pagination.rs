@@ -66,7 +66,7 @@ fn page_checked_before_per_page() {
 fn error_message_includes_page_numbers() {
     let err = validate_pagination(&PageRequest { page: 0, per_page: 20 }).unwrap_err();
     if let DbError::Validation { message } = err {
-        assert!(message.contains("0"));
+    	assert!(message.contains('0'));
         assert!(message.contains(&MAX_PAGE_NUMBER.to_string()));
     }
 }

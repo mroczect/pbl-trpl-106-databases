@@ -125,7 +125,7 @@ fn validate_text_len_zero_max() {
 fn validate_text_len_message_mentions_actual_length() {
     let err = validate_text_len("x", "abcdef", 3).unwrap_err();
     if let DbError::Validation { message } = err {
-        assert!(message.contains("6"));
-        assert!(message.contains("3"));
+    assert!(message.contains('6'));
+    assert!(message.contains('3'));
     }
 }

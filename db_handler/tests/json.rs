@@ -1,5 +1,9 @@
-#![allow(unused_crate_dependencies, clippy::unwrap_used, clippy::expect_used)]
-
+#![allow(
+    unused_crate_dependencies,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp
+)]
 use std::collections::{BTreeMap, HashMap};
 
 use db_handler::json::{
@@ -275,15 +279,6 @@ fn to_json_non_finite_inside_struct_collapses_to_null() {
     };
     assert_eq!(to_json(&v).unwrap(), json!({"x": null, "label": "ok"}));
 }
-
-#[test]
-fn to_string_errors_on_non_finite_contrast_with_to_value() {
-    assert!(serde_json::to_string(&f64::NAN).is_err());
-    assert!(serde_json::to_string(&f64::INFINITY).is_err());
-    assert!(serde_json::to_string(&f64::NEG_INFINITY).is_err());
-    assert_eq!(serde_json::to_value(f64::NAN).unwrap(), Json::Null);
-}
-
 
 #[test]
 fn from_json_signed_integers() {

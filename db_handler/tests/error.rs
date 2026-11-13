@@ -1,4 +1,10 @@
-#![allow(unused_crate_dependencies, clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    unused_crate_dependencies,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 
 use std::collections::HashSet;
 use std::error::Error;
@@ -470,7 +476,7 @@ fn display_empty_message() {
 fn serialize_very_long_message() {
     let long = "a".repeat(100_000);
     let e = DbError::Io {
-        message: long.clone(),
+        message: long,
     };
     let json = to_json(&e).unwrap();
     assert_eq!(json["message"].as_str().unwrap().len(), 100_000);
