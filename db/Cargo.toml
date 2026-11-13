@@ -1,0 +1,21 @@
+[package]
+name = "db"
+version = "0.1.0"
+description = "Facade over db_handler + db_core — the only crate the backend should depend on"
+keywords = ["database", "facade", "mysql", "backend", "json"]
+categories = ["database", "web-programming"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+db_core = { version = "0.1.0", path = "../db_core" }
+db_handler = { version = "0.1.0", path = "../db_handler" }
+dotenvy = "0.15.7"
+
+[lints]
+workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "db_core"
+version = "0.1.0"
+description = "MySQL implementation of db_handler contracts"
+keywords = ["database", "mysql", "sqlx", "driver", "async"]
+categories = ["database"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+async-trait = "0.1.92"
+db_handler = { version = "0.1.0", path = "../db_handler" }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls", "macros", "migrate"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+[lints]
+workspace = true
