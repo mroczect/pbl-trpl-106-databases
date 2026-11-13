@@ -14,7 +14,6 @@ use db_handler::types::core::SortDirection;
 use db_handler::DbError;
 use serde_json::json;
 
-
 const EXPECTED_VARIANT_COUNT: usize = 9;
 
 fn all_variants() -> Vec<(&'static str, DbError)> {
@@ -191,7 +190,6 @@ fn not_found_serializes_without_message_field() {
     assert!(!obj.contains_key("message"));
 }
 
-
 #[test]
 fn display_missing_env() {
     let e = DbError::MissingEnv { name: "X".into() };
@@ -267,19 +265,54 @@ fn not_found_display_has_no_trailing_separator() {
     assert!(!s.ends_with(": "));
 }
 
-
 #[test]
 fn debug_each_variant_contains_name() {
     let cases: [(&str, DbError); 9] = [
         ("MissingEnv", DbError::MissingEnv { name: "x".into() }),
-        ("InvalidEnv", DbError::InvalidEnv { name: "x".into(), reason: "y".into() }),
-        ("Connection", DbError::Connection { message: "m".into() }),
-        ("Query", DbError::Query { message: "m".into() }),
-        ("Database", DbError::Database { message: "m".into() }),
+        (
+            "InvalidEnv",
+            DbError::InvalidEnv {
+                name: "x".into(),
+                reason: "y".into(),
+            },
+        ),
+        (
+            "Connection",
+            DbError::Connection {
+                message: "m".into(),
+            },
+        ),
+        (
+            "Query",
+            DbError::Query {
+                message: "m".into(),
+            },
+        ),
+        (
+            "Database",
+            DbError::Database {
+                message: "m".into(),
+            },
+        ),
         ("NotFound", DbError::NotFound),
-        ("Validation", DbError::Validation { message: "m".into() }),
-        ("Json", DbError::Json { message: "m".into() }),
-        ("Io", DbError::Io { message: "m".into() }),
+        (
+            "Validation",
+            DbError::Validation {
+                message: "m".into(),
+            },
+        ),
+        (
+            "Json",
+            DbError::Json {
+                message: "m".into(),
+            },
+        ),
+        (
+            "Io",
+            DbError::Io {
+                message: "m".into(),
+            },
+        ),
     ];
     for (name, variant) in cases {
         let dbg = format!("{variant:?}");
@@ -294,7 +327,6 @@ fn debug_preserves_message_content() {
     };
     assert!(format!("{e:?}").contains("very specific text"));
 }
-
 
 #[test]
 fn display_differs_from_debug_for_all_variants() {
@@ -322,7 +354,6 @@ fn debug_differs_from_json_for_all_variants() {
         assert_ne!(dbg, json_str, "Debug equals JSON for {kind}");
     }
 }
-
 
 #[test]
 fn all_kinds_are_unique() {
@@ -381,7 +412,6 @@ fn every_variant_serializes_as_object_with_kind() {
         assert!(json["kind"].is_string(), "{kind} kind not a string");
     }
 }
-
 
 #[test]
 fn serialize_message_with_double_quotes() {
@@ -452,7 +482,6 @@ fn display_passes_through_special_chars_verbatim() {
     assert_eq!(e.to_string(), "connection error: quoted \" text");
 }
 
-
 #[test]
 fn serialize_empty_message() {
     let e = DbError::Validation {
@@ -475,22 +504,21 @@ fn display_empty_message() {
 #[test]
 fn serialize_very_long_message() {
     let long = "a".repeat(100_000);
-    let e = DbError::Io {
-        message: long,
-    };
+    let e = DbError::Io { message: long };
     let json = to_json(&e).unwrap();
     assert_eq!(json["message"].as_str().unwrap().len(), 100_000);
 }
 
 #[test]
 fn serialize_empty_env_name() {
-    let e = DbError::MissingEnv { name: String::new() };
+    let e = DbError::MissingEnv {
+        name: String::new(),
+    };
     assert_eq!(
         to_json(&e).unwrap(),
         json!({"kind": "missing_env", "name": ""})
     );
 }
-
 
 #[test]
 fn from_serde_error_invalid_type() {
@@ -517,7 +545,10 @@ fn from_serde_error_missing_field() {
 fn from_serde_error_unknown_variant() {
     let err = from_json::<SortDirection>(&json!("sideways")).unwrap_err();
     if let DbError::Json { message } = err {
-        assert!(message.contains("unknown variant"), "message was: {message}");
+        assert!(
+            message.contains("unknown variant"),
+            "message was: {message}"
+        );
         assert!(message.contains("sideways"));
     } else {
         panic!("expected DbError::Json");
@@ -542,7 +573,6 @@ fn from_serde_error_on_null_when_object_expected() {
     let err = from_json::<RequiredField>(&json!(null)).unwrap_err();
     assert!(matches!(err, DbError::Json { .. }));
 }
-
 
 #[test]
 fn implements_std_error_trait() {
@@ -578,7 +608,6 @@ fn source_is_none_for_all_variants() {
         );
     }
 }
-
 
 #[test]
 fn identical_errors_serialize_identically() {
@@ -622,7 +651,6 @@ fn serialization_is_deterministic_across_repeated_calls() {
         assert_eq!(to_json(&e).unwrap(), first);
     }
 }
-
 
 #[test]
 fn expected_variant_count_is_up_to_date() {

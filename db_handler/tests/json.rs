@@ -14,7 +14,6 @@ use db_handler::DbError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-
 #[test]
 fn empty_object_is_empty_map() {
     let j = empty_object();
@@ -63,11 +62,13 @@ fn empty_object_calls_are_equal_but_independent() {
 fn empty_object_can_be_mutated_after_creation() {
     let mut j = empty_object();
     let previous = j.as_object_mut().unwrap().insert("k".into(), json!(1));
-    assert!(previous.is_none(), "insert into empty object must return None");
+    assert!(
+        previous.is_none(),
+        "insert into empty object must return None"
+    );
     assert_eq!(j, json!({"k": 1}));
     assert_eq!(empty_object(), json!({}));
 }
-
 
 #[test]
 fn to_json_signed_integers() {
@@ -145,7 +146,6 @@ fn to_json_unit_is_null() {
     assert_eq!(to_json(&()).unwrap(), Json::Null);
 }
 
-
 #[test]
 fn to_json_vec() {
     assert_eq!(to_json(&vec![1, 2, 3]).unwrap(), json!([1, 2, 3]));
@@ -201,7 +201,6 @@ fn to_json_nested_structure() {
     assert_eq!(to_json(&value).unwrap(), value);
 }
 
-
 #[test]
 fn to_json_page_request() {
     let req = PageRequest {
@@ -246,7 +245,6 @@ fn to_json_struct_none_field_serializes_to_null() {
     };
     assert_eq!(to_json(&x).unwrap(), json!({"maybe": null, "present": 9}));
 }
-
 
 #[test]
 fn to_json_nan_collapses_to_null() {
@@ -327,7 +325,6 @@ fn from_json_null_to_unit() {
     from_json::<()>(&Json::Null).unwrap();
 }
 
-
 #[test]
 fn from_json_vec() {
     let v: Vec<i32> = from_json(&json!([1, 2, 3])).unwrap();
@@ -372,7 +369,6 @@ fn from_json_nested() {
     assert_eq!(o.inner, vec![1, 2, 3]);
 }
 
-
 #[test]
 fn from_json_page_request_from_empty_object_uses_defaults() {
     let req: PageRequest = from_json(&json!({})).unwrap();
@@ -410,7 +406,6 @@ fn from_json_struct_accepts_array_in_field_order() {
     let p: Point = from_json(&json!([3, 4])).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
-
 
 #[test]
 fn from_json_rejects_string_where_number_expected() {
@@ -493,7 +488,6 @@ fn from_json_error_always_carries_nonempty_message() {
     }
 }
 
-
 fn roundtrip<T>(value: &T) -> T
 where
     T: Serialize + serde::de::DeserializeOwned,
@@ -541,7 +535,6 @@ fn roundtrip_preserves_negative_zero() {
     assert!(back == 0.0 && back.is_sign_negative());
 }
 
-
 #[test]
 fn expect_object_on_object_returns_map() {
     let j = json!({"a": 1, "b": 2});
@@ -581,7 +574,6 @@ fn expect_object_returns_reference_not_clone() {
     assert!(std::ptr::eq(inner, direct));
 }
 
-
 #[test]
 fn expect_object_on_null_fails_with_validation() {
     let err = expect_object(&json!(null)).unwrap_err();
@@ -611,7 +603,6 @@ fn expect_object_on_bool_fails_with_validation() {
     let err = expect_object(&json!(true)).unwrap_err();
     assert!(matches!(err, DbError::Validation { .. }));
 }
-
 
 #[test]
 fn require_field_existing_returns_value() {
@@ -655,7 +646,6 @@ fn require_field_returns_reference_into_map() {
     assert!(std::ptr::eq(via_require, via_get));
 }
 
-
 #[test]
 fn require_field_missing_fails_with_validation() {
     let j = json!({"name": "Alice"});
@@ -696,7 +686,6 @@ fn require_field_empty_name_is_missing_unless_present() {
     assert!(require_field(map2, "").is_err());
 }
 
-
 #[test]
 fn json_alias_equals_serde_json_value() {
     let a: Json = json!(42);
@@ -726,7 +715,6 @@ fn number_from_integers() {
     assert_eq!(Number::from(42i32).as_i64(), Some(42));
     assert_eq!(Number::from(42u32).as_u64(), Some(42));
 }
-
 
 #[test]
 fn to_json_never_panics_on_any_json_input() {

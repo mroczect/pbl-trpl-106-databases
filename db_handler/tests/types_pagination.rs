@@ -17,7 +17,6 @@ fn page_request_default_per_page_is_default_constant() {
     assert_eq!(req.per_page, DEFAULT_PAGE_SIZE);
 }
 
-
 #[test]
 fn page_request_deserialize_empty_object_uses_defaults() {
     let req: PageRequest = from_json(&json!({})).unwrap();
@@ -107,10 +106,12 @@ fn page_request_rejects_null_root() {
     assert!(from_json::<PageRequest>(&json!(null)).is_err());
 }
 
-
 #[test]
 fn page_request_serialize_exact_shape() {
-    let req = PageRequest { page: 2, per_page: 30 };
+    let req = PageRequest {
+        page: 2,
+        per_page: 30,
+    };
     let j = to_json(&req).unwrap();
     let obj = j.as_object().unwrap();
     assert_eq!(obj.len(), 2);
@@ -120,34 +121,48 @@ fn page_request_serialize_exact_shape() {
 
 #[test]
 fn page_request_roundtrip() {
-    let original = PageRequest { page: 7, per_page: 42 };
+    let original = PageRequest {
+        page: 7,
+        per_page: 42,
+    };
     let back: PageRequest = from_json(&to_json(&original).unwrap()).unwrap();
     assert_eq!(back.page, original.page);
     assert_eq!(back.per_page, original.per_page);
 }
 
-
 #[test]
 fn page_request_offset_first_page_is_zero() {
-    let req = PageRequest { page: 1, per_page: 20 };
+    let req = PageRequest {
+        page: 1,
+        per_page: 20,
+    };
     assert_eq!(req.offset(), 0);
 }
 
 #[test]
 fn page_request_offset_second_page() {
-    let req = PageRequest { page: 2, per_page: 20 };
+    let req = PageRequest {
+        page: 2,
+        per_page: 20,
+    };
     assert_eq!(req.offset(), 20);
 }
 
 #[test]
 fn page_request_offset_third_page_custom() {
-    let req = PageRequest { page: 3, per_page: 5 };
+    let req = PageRequest {
+        page: 3,
+        per_page: 5,
+    };
     assert_eq!(req.offset(), 10);
 }
 
 #[test]
 fn page_request_offset_zero_page_saturates() {
-    let req = PageRequest { page: 0, per_page: 20 };
+    let req = PageRequest {
+        page: 0,
+        per_page: 20,
+    };
     assert_eq!(req.offset(), 0);
 }
 
@@ -169,10 +184,12 @@ fn page_request_offset_zero_per_page() {
     assert_eq!(req.offset(), 0);
 }
 
-
 #[test]
 fn page_request_copy() {
-    let a = PageRequest { page: 1, per_page: 10 };
+    let a = PageRequest {
+        page: 1,
+        per_page: 10,
+    };
     let b = a;
     assert_eq!(a.page, b.page);
     assert_eq!(a.per_page, b.per_page);
@@ -180,12 +197,14 @@ fn page_request_copy() {
 
 #[test]
 fn page_request_debug_contains_type_name() {
-    let req = PageRequest { page: 1, per_page: 20 };
+    let req = PageRequest {
+        page: 1,
+        per_page: 20,
+    };
     let dbg = format!("{:?}", req);
     assert!(dbg.contains("PageRequest"));
     assert!(dbg.contains("page"));
 }
-
 
 #[test]
 fn page_meta_zero_total() {
@@ -236,7 +255,6 @@ fn page_meta_u64_max_values() {
     assert_eq!(m.total_pages, 1);
 }
 
-
 #[test]
 fn page_meta_serialize_exact_shape() {
     let m = PageMeta::new(2, 10, 25);
@@ -271,7 +289,6 @@ fn page_meta_deserialize_ignores_computed_field() {
     assert_eq!(m.total_pages, 999);
 }
 
-
 #[test]
 fn page_meta_copy() {
     let a = PageMeta::new(1, 20, 100);
@@ -284,7 +301,6 @@ fn page_meta_copy() {
 fn page_meta_debug_contains_type_name() {
     assert!(format!("{:?}", PageMeta::new(1, 20, 5)).contains("PageMeta"));
 }
-
 
 #[test]
 fn paginated_empty_items_serialize() {
@@ -316,7 +332,6 @@ fn paginated_with_primitives_serialize() {
     assert_eq!(items.get(1).and_then(Json::as_i64), Some(2));
     assert_eq!(items.get(2).and_then(Json::as_i64), Some(3));
 }
-
 
 #[test]
 fn paginated_empty_roundtrip() {

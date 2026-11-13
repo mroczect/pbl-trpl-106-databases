@@ -17,6 +17,7 @@ async-trait = "0.1.92"
 db_handler = { version = "0.1.0", path = "../db_handler" }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls", "macros", "migrate"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
+serde_json = "1.0.154"
 
 [lints]
 workspace = true

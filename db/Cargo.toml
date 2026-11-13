@@ -17,5 +17,9 @@ db_core = { version = "0.1.0", path = "../db_core" }
 db_handler = { version = "0.1.0", path = "../db_handler" }
 dotenvy = "0.15.7"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls"] }
+
 [lints]
 workspace = true

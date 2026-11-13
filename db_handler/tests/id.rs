@@ -13,7 +13,6 @@ use serde_json::json;
 struct User;
 struct Product;
 
-
 const fn assert_traits_implemented<T>()
 where
     T: Copy
@@ -43,7 +42,6 @@ fn id_is_send_and_sync() {
     assert_send_sync::<Id<Product>>();
 }
 
-
 #[test]
 fn size_matches_i64() {
     assert_eq!(size_of::<Id<User>>(), size_of::<i64>());
@@ -55,7 +53,6 @@ fn alignment_matches_i64() {
     assert_eq!(align_of::<Id<User>>(), align_of::<i64>());
     assert_eq!(align_of::<Id<Product>>(), align_of::<i64>());
 }
-
 
 #[test]
 fn marker_types_produce_distinct_id_types() {
@@ -72,7 +69,6 @@ fn same_marker_produces_same_id_type() {
     assert_eq!(TypeId::of::<Id<Product>>(), TypeId::of::<Id<Product>>());
 }
 
-
 #[test]
 fn new_and_value_roundtrip() {
     let cases = [0, 1, -1, 42, -42, i64::MAX, i64::MIN];
@@ -87,7 +83,6 @@ fn default_is_zero() {
     assert_eq!(Id::<User>::default().value(), 0);
     assert_eq!(Id::<Product>::default().value(), 0);
 }
-
 
 const ZERO_ID: Id<User> = Id::new(0);
 const MAX_ID: Id<User> = Id::new(i64::MAX);
@@ -105,10 +100,9 @@ fn const_constructed_ids_have_correct_values() {
 #[test]
 fn const_id_usable_in_const_context() {
     const ONE: Id<User> = Id::new(1);
-    const DOUBLE: i64 = ONE.value() * 2; 
+    const DOUBLE: i64 = ONE.value() * 2;
     assert_eq!(DOUBLE, 2);
 }
-
 
 #[test]
 fn serialize_transparent_integer() {
@@ -130,7 +124,6 @@ fn serialize_produces_json_integer_not_float_or_string() {
     assert!(!json.is_f64());
     assert!(!json.is_string());
 }
-
 
 #[test]
 fn deserialize_transparent_integer() {
@@ -200,7 +193,6 @@ fn deserialize_rejects_negative_out_of_range() {
     assert_eq!(min.value(), i64::MIN);
 }
 
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct UserRecord {
     id: Id<User>,
@@ -244,14 +236,8 @@ fn two_id_types_coexist_in_separate_structs() {
         price: 100,
     };
     assert_eq!(user.id.value(), product.id.value());
-    assert_eq!(
-        to_json(&user).unwrap(),
-        json!({"id": 1, "name": "A"})
-    );
-    assert_eq!(
-        to_json(&product).unwrap(),
-        json!({"id": 1, "price": 100})
-    );
+    assert_eq!(to_json(&user).unwrap(), json!({"id": 1, "name": "A"}));
+    assert_eq!(to_json(&product).unwrap(), json!({"id": 1, "price": 100}));
 }
 
 #[test]
@@ -265,12 +251,8 @@ fn id_in_nested_structure() {
         id: Id::new(10),
         buyer: Id::new(20),
     };
-    assert_eq!(
-        to_json(&order).unwrap(),
-        json!({"id": 10, "buyer": 20})
-    );
+    assert_eq!(to_json(&order).unwrap(), json!({"id": 10, "buyer": 20}));
 }
-
 
 #[test]
 fn roundtrip_all_extreme_values() {
@@ -281,7 +263,6 @@ fn roundtrip_all_extreme_values() {
         assert_eq!(back.value(), original.value(), "value {value} roundtrip");
     }
 }
-
 
 #[test]
 fn display_shows_raw_integer() {
@@ -308,7 +289,6 @@ fn format_with_padding() {
     assert_eq!(format!("{id:>5}"), "   42");
 }
 
-
 #[test]
 fn debug_contains_value() {
     let dbg = format!("{:?}", Id::<User>::new(42));
@@ -321,12 +301,11 @@ fn debug_contains_type_name() {
     assert!(dbg.contains("Id"));
 }
 
-
 #[test]
 fn copy_semantics() {
     let a: Id<User> = Id::new(42);
-    let b = a; 
-    let c = a; 
+    let b = a;
+    let c = a;
     assert_eq!(a.value(), 42);
     assert_eq!(b.value(), 42);
     assert_eq!(c.value(), 42);
@@ -335,10 +314,9 @@ fn copy_semantics() {
 #[test]
 fn explicit_clone() {
     let a: Id<User> = Id::new(7);
-    let b = a;	
+    let b = a;
     assert_eq!(a.value(), b.value());
 }
-
 
 #[test]
 fn equality_is_value_based() {
@@ -363,7 +341,6 @@ fn equality_reflexive() {
         assert_eq!(id, id);
     }
 }
-
 
 #[test]
 fn ordering_follows_i64() {
@@ -391,31 +368,26 @@ fn ordering_with_equal_values() {
 
 #[test]
 fn sort_uses_numeric_order() {
-	let mut v = [
-    Id::<User>::new(3),
-    Id::<User>::new(1),
-    Id::<User>::new(2),
-    Id::<User>::new(-1),
-    Id::<User>::new(0),
-	];
-	v.sort();
-	let values: Vec<i64> = v.iter().map(|id| id.value()).collect();
-	assert_eq!(values, vec![-1, 0, 1, 2, 3]);
+    let mut v = [
+        Id::<User>::new(3),
+        Id::<User>::new(1),
+        Id::<User>::new(2),
+        Id::<User>::new(-1),
+        Id::<User>::new(0),
+    ];
+    v.sort();
+    let values: Vec<i64> = v.iter().map(|id| id.value()).collect();
+    assert_eq!(values, vec![-1, 0, 1, 2, 3]);
 }
 
 #[test]
 fn sort_is_total_and_deterministic() {
-    let mut v1 = vec![
-        Id::<User>::new(5),
-        Id::<User>::new(1),
-        Id::<User>::new(3),
-    ];
+    let mut v1 = vec![Id::<User>::new(5), Id::<User>::new(1), Id::<User>::new(3)];
     let mut v2 = v1.clone();
     v1.sort();
     v2.sort();
     assert_eq!(v1, v2);
 }
-
 
 #[test]
 fn hash_consistent_with_equality() {
@@ -445,7 +417,6 @@ fn hashset_distinguishes_different_values() {
     assert_eq!(set.len(), 5);
 }
 
-
 #[test]
 fn btreeset_stores_sorted() {
     let mut set: BTreeSet<Id<User>> = BTreeSet::new();
@@ -466,14 +437,12 @@ fn btreemap_uses_value_ordering() {
     assert_eq!(keys, vec![1, 2, 3]);
 }
 
-
 #[test]
 fn distinct_instances_are_independent() {
     let a: Id<User> = Id::new(1);
     let b: Id<User> = Id::new(1);
     assert_eq!(a.value(), b.value());
 }
-
 
 #[test]
 fn same_value_different_marker_has_same_display() {

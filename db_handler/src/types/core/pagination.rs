@@ -27,7 +27,7 @@ impl Default for PageRequest {
 }
 
 impl PageRequest {
-        #[must_use]
+    #[must_use]
     pub const fn offset(&self) -> u64 {
         self.page.saturating_sub(1).saturating_mul(self.per_page)
     }
@@ -42,7 +42,7 @@ pub struct PageMeta {
 }
 
 impl PageMeta {
-        #[must_use]
+    #[must_use]
     pub const fn new(page: u64, per_page: u64, total: u64) -> Self {
         let total_pages = if per_page == 0 {
             0

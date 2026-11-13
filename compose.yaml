@@ -1,0 +1,24 @@
+services:
+  mysql:
+    image: docker.io/library/mysql:8.4
+    container_name: pbl-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: pbl_trpl_106
+      MYSQL_USER: pbl_user
+      MYSQL_PASSWORD: pbl_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+volumes:
+  mysql_data:

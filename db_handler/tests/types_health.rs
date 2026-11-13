@@ -4,7 +4,6 @@ use db_handler::json::{from_json, to_json, Json};
 use db_handler::types::core::{HealthDetails, HealthStatus};
 use serde_json::json;
 
-
 #[test]
 fn health_status_serde_healthy() {
     assert_eq!(to_json(&HealthStatus::Healthy).unwrap(), json!("healthy"));
@@ -17,9 +16,11 @@ fn health_status_serde_degraded() {
 
 #[test]
 fn health_status_serde_unhealthy() {
-    assert_eq!(to_json(&HealthStatus::Unhealthy).unwrap(), json!("unhealthy"));
+    assert_eq!(
+        to_json(&HealthStatus::Unhealthy).unwrap(),
+        json!("unhealthy")
+    );
 }
-
 
 #[test]
 fn health_status_deserialize_healthy() {
@@ -63,7 +64,6 @@ fn health_status_rejects_non_string() {
     assert!(from_json::<HealthStatus>(&json!([])).is_err());
     assert!(from_json::<HealthStatus>(&json!({})).is_err());
 }
-
 
 #[test]
 fn health_status_eq_reflexive() {
@@ -110,7 +110,6 @@ fn health_status_roundtrip_all() {
         assert_eq!(back, original);
     }
 }
-
 
 #[test]
 fn health_details_serialize_with_message_exact() {
@@ -199,12 +198,8 @@ fn health_details_serialize_latency_u64_max() {
         message: None,
     };
     let j = to_json(&d).unwrap();
-    assert_eq!(
-        j.get("latency_ms").and_then(Json::as_u64),
-        Some(u64::MAX)
-    );
+    assert_eq!(j.get("latency_ms").and_then(Json::as_u64), Some(u64::MAX));
 }
-
 
 #[test]
 fn health_details_deserialize_with_message() {
@@ -292,7 +287,6 @@ fn health_details_deserialize_latency_u64_max() {
     assert_eq!(d.latency_ms, u64::MAX);
 }
 
-
 #[test]
 fn health_details_rejects_missing_status() {
     let r = from_json::<HealthDetails>(&json!({
@@ -371,7 +365,6 @@ fn health_details_rejects_array_root() {
     let r = from_json::<HealthDetails>(&json!([1, 2, 3]));
     assert!(r.is_err());
 }
-
 
 #[test]
 fn health_details_clone_preserves_all_fields() {

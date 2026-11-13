@@ -4,10 +4,9 @@
 use std::time::Duration;
 
 use db_handler::constants::{
-    DEFAULT_PAGE_SIZE, HEALTH_TIMEOUT_MS, MAX_PAGE_NUMBER, MAX_PAGE_SIZE,
-    MAX_PARAMS_PER_QUERY, MAX_QUERY_LENGTH, MAX_RESULT_ROWS, MAX_STRING_FIELD_LENGTH,
+    DEFAULT_PAGE_SIZE, HEALTH_TIMEOUT_MS, MAX_PAGE_NUMBER, MAX_PAGE_SIZE, MAX_PARAMS_PER_QUERY,
+    MAX_QUERY_LENGTH, MAX_RESULT_ROWS, MAX_STRING_FIELD_LENGTH,
 };
-
 
 const _: u64 = DEFAULT_PAGE_SIZE;
 const _: u64 = MAX_PAGE_SIZE;
@@ -17,7 +16,6 @@ const _: usize = MAX_QUERY_LENGTH;
 const _: usize = MAX_PARAMS_PER_QUERY;
 const _: usize = MAX_RESULT_ROWS;
 const _: usize = MAX_STRING_FIELD_LENGTH;
-
 
 const _: () = assert!(DEFAULT_PAGE_SIZE > 0);
 const _: () = assert!(MAX_PAGE_SIZE > 0);
@@ -33,7 +31,6 @@ const _: () = assert!(MAX_PAGE_SIZE < MAX_PAGE_NUMBER);
 const _: () = assert!(MAX_PARAMS_PER_QUERY < MAX_QUERY_LENGTH);
 const _: () = assert!((MAX_RESULT_ROWS as u64) < MAX_PAGE_NUMBER);
 const _: () = assert!(MAX_QUERY_LENGTH > MAX_STRING_FIELD_LENGTH);
-
 
 #[test]
 fn default_page_size_is_20() {
@@ -75,7 +72,6 @@ fn health_timeout_ms_is_2000() {
     assert_eq!(HEALTH_TIMEOUT_MS, 2_000);
 }
 
-
 #[test]
 fn max_string_field_length_equals_u16_max() {
     assert_eq!(MAX_STRING_FIELD_LENGTH, u16::MAX as usize);
@@ -95,7 +91,6 @@ fn max_string_field_length_plus_one_overflows_u16() {
 fn max_string_field_length_is_64_kib_minus_one() {
     assert_eq!(MAX_STRING_FIELD_LENGTH, 64 * 1024 - 1);
 }
-
 
 #[test]
 fn default_page_size_strictly_less_than_max() {
@@ -124,7 +119,6 @@ fn default_page_size_divides_evenly() {
     assert_eq!(DEFAULT_PAGE_SIZE % 10, 0);
 }
 
-
 #[test]
 fn health_timeout_constructs_duration() {
     let d = Duration::from_millis(HEALTH_TIMEOUT_MS);
@@ -145,7 +139,6 @@ fn health_timeout_at_most_5s() {
 fn health_timeout_whole_seconds() {
     assert_eq!(HEALTH_TIMEOUT_MS % 1_000, 0);
 }
-
 
 #[test]
 fn max_page_size_times_max_page_number_no_overflow_u64() {
@@ -174,7 +167,6 @@ fn max_addressable_rows_is_at_least_10_million() {
     let total = MAX_PAGE_SIZE.saturating_mul(MAX_PAGE_NUMBER);
     assert!(total >= 10_000_000, "max addressable rows = {total}");
 }
-
 
 #[test]
 fn max_page_size_fits_u8() {
@@ -206,7 +198,6 @@ fn max_page_number_fits_u32() {
     assert!(u32::try_from(MAX_PAGE_NUMBER).is_ok());
 }
 
-
 #[test]
 fn max_query_length_greater_than_string_field_length() {
     assert!(MAX_QUERY_LENGTH > MAX_STRING_FIELD_LENGTH);
@@ -228,12 +219,10 @@ fn default_page_size_less_than_max_result_rows() {
     assert!(DEFAULT_PAGE_SIZE < MAX_RESULT_ROWS as u64);
 }
 
-
 #[test]
 fn default_page_size_differs_from_max_page_size() {
     assert_ne!(DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 }
-
 
 #[test]
 fn constants_usable_in_const_context() {
@@ -255,7 +244,6 @@ fn constants_usable_in_const_context() {
     assert_eq!(DEFAULT, DEFAULT_PAGE_SIZE);
     assert_eq!(PAGES, MAX_PAGE_NUMBER);
 }
-
 
 #[test]
 fn all_constants_strictly_positive() {

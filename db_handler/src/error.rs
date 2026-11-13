@@ -5,31 +5,31 @@ use thiserror::Error;
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum DbError {
-        #[error("missing environment variable: {name}")]
+    #[error("missing environment variable: {name}")]
     MissingEnv { name: String },
 
-        #[error("invalid environment variable {name}: {reason}")]
+    #[error("invalid environment variable {name}: {reason}")]
     InvalidEnv { name: String, reason: String },
 
-        #[error("connection error: {message}")]
+    #[error("connection error: {message}")]
     Connection { message: String },
 
-        #[error("query error: {message}")]
+    #[error("query error: {message}")]
     Query { message: String },
 
-        #[error("database error: {message}")]
+    #[error("database error: {message}")]
     Database { message: String },
 
-        #[error("resource not found")]
+    #[error("resource not found")]
     NotFound,
 
-        #[error("validation failed: {message}")]
+    #[error("validation failed: {message}")]
     Validation { message: String },
 
-        #[error("json error: {message}")]
+    #[error("json error: {message}")]
     Json { message: String },
 
-        #[error("io error: {message}")]
+    #[error("io error: {message}")]
     Io { message: String },
 }
 

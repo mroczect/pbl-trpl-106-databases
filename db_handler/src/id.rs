@@ -11,7 +11,7 @@ pub struct Id<T> {
 }
 
 impl<T> Id<T> {
-        #[must_use]
+    #[must_use]
     pub const fn new(value: i64) -> Self {
         Self {
             value,
@@ -19,7 +19,7 @@ impl<T> Id<T> {
         }
     }
 
-        #[must_use]
+    #[must_use]
     pub const fn value(self) -> i64 {
         self.value
     }

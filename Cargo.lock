@@ -154,6 +154,8 @@ dependencies = [
  "db_core",
  "db_handler",
  "dotenvy",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
@@ -162,6 +164,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "db_handler",
+ "serde_json",
  "sqlx",
  "tokio",
 ]

@@ -12,7 +12,11 @@ fn accepts_default() {
 
 #[test]
 fn accepts_first_page() {
-    assert!(validate_pagination(&PageRequest { page: 1, per_page: 1 }).is_ok());
+    assert!(validate_pagination(&PageRequest {
+        page: 1,
+        per_page: 1
+    })
+    .is_ok());
 }
 
 #[test]
@@ -26,7 +30,10 @@ fn accepts_max_boundary() {
 
 #[test]
 fn rejects_page_zero() {
-    let r = validate_pagination(&PageRequest { page: 0, per_page: 20 });
+    let r = validate_pagination(&PageRequest {
+        page: 0,
+        per_page: 20,
+    });
     assert!(matches!(r, Err(DbError::Validation { .. })));
 }
 
@@ -41,7 +48,10 @@ fn rejects_page_above_max() {
 
 #[test]
 fn rejects_per_page_zero() {
-    let r = validate_pagination(&PageRequest { page: 1, per_page: 0 });
+    let r = validate_pagination(&PageRequest {
+        page: 1,
+        per_page: 0,
+    });
     assert!(matches!(r, Err(DbError::Validation { .. })));
 }
 
@@ -56,7 +66,11 @@ fn rejects_per_page_above_max() {
 
 #[test]
 fn page_checked_before_per_page() {
-    let err = validate_pagination(&PageRequest { page: 0, per_page: 0 }).unwrap_err();
+    let err = validate_pagination(&PageRequest {
+        page: 0,
+        per_page: 0,
+    })
+    .unwrap_err();
     if let DbError::Validation { message } = err {
         assert!(message.contains("page"));
     }
@@ -64,9 +78,13 @@ fn page_checked_before_per_page() {
 
 #[test]
 fn error_message_includes_page_numbers() {
-    let err = validate_pagination(&PageRequest { page: 0, per_page: 20 }).unwrap_err();
+    let err = validate_pagination(&PageRequest {
+        page: 0,
+        per_page: 20,
+    })
+    .unwrap_err();
     if let DbError::Validation { message } = err {
-    	assert!(message.contains('0'));
+        assert!(message.contains('0'));
         assert!(message.contains(&MAX_PAGE_NUMBER.to_string()));
     }
 }

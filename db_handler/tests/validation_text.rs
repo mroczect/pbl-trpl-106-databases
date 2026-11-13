@@ -35,7 +35,6 @@ fn validate_not_empty_error_mentions_field() {
     }
 }
 
-
 #[test]
 fn validate_text_accepts_empty() {
     assert!(validate_text("bio", "").is_ok());
@@ -108,7 +107,6 @@ fn validate_text_error_mentions_field_name() {
     }
 }
 
-
 #[test]
 fn validate_text_len_custom_max() {
     assert!(validate_text_len("x", "12345", 5).is_ok());
@@ -125,7 +123,7 @@ fn validate_text_len_zero_max() {
 fn validate_text_len_message_mentions_actual_length() {
     let err = validate_text_len("x", "abcdef", 3).unwrap_err();
     if let DbError::Validation { message } = err {
-    assert!(message.contains('6'));
-    assert!(message.contains('3'));
+        assert!(message.contains('6'));
+        assert!(message.contains('3'));
     }
 }

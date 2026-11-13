@@ -10,3 +10,10 @@ pub mod validation;
 pub use error::{DbError, Result};
 pub use id::Id;
 pub use json::Json;
+
+pub use traits::core::{Connection, DatabaseInfoProvider, HealthCheck, Transaction};
+pub use traits::repository::Repository;
+
+pub use types::core::{
+    DatabaseInfo, HealthDetails, HealthStatus, PageMeta, PageRequest, Paginated, SortDirection,
+};
