@@ -1,9 +1,23 @@
+pub mod dml;
 pub mod health;
 pub mod info;
+pub mod migration;
 pub mod pagination;
+pub mod query;
+pub mod result;
+pub mod row;
+pub mod schema;
 pub mod sort;
+pub mod transaction;
 
+pub use dml::{Condition, DeleteInput, Filter, InsertInput, UpdateInput};
 pub use health::{HealthDetails, HealthStatus};
 pub use info::DatabaseInfo;
+pub use migration::{Migration, MigrationState, MigrationStatus};
 pub use pagination::{PageMeta, PageRequest, Paginated};
+pub use query::{ColumnValue, Query};
+pub use result::{ExecuteResult, QueryResult};
+pub use row::{Column, Row, Value};
+pub use schema::{ColumnDef, Constraint, ConstraintKind, DataType, Index, Table, TableChange};
 pub use sort::SortDirection;
+pub use transaction::IsolationLevel;
