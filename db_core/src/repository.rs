@@ -1,6 +1,7 @@
 use crate::Database;
 use async_trait::async_trait;
 use db_handler::{
+    validation::{validate_identifier, validate_pagination},
     Condition, CrudRepository, DbError, Executor, Filter, InsertInput, PageMeta, PageRequest,
     Paginated, Query, Result, Row, UpdateInput, Value,
 };
@@ -32,13 +33,37 @@ impl<T, F> EntityRepository<T, F>
 where
     F: Fn(&dyn Row) -> Result<T> + Send + Sync,
 {
+                                                    #[allow(clippy::expect_used)]
     pub fn new(db: Database, table: impl Into<String>, pk: impl Into<String>, mapper: F) -> Self {
-        Self {
+        Self::try_new(db, table, pk, mapper).expect("invalid table or pk identifier")
+    }
+
+        pub fn try_new(
+        db: Database,
+        table: impl Into<String>,
+        pk: impl Into<String>,
+        mapper: F,
+    ) -> Result<Self> {
+        let table = table.into();
+        let pk = pk.into();
+        validate_identifier(&table)?;
+        validate_identifier(&pk)?;
+        Ok(Self {
             db,
-            table: table.into(),
-            pk: pk.into(),
+            table,
+            pk,
             mapper,
-        }
+        })
+    }
+
+        #[must_use]
+    pub fn table(&self) -> &str {
+        &self.table
+    }
+
+        #[must_use]
+    pub fn primary_key(&self) -> &str {
+        &self.pk
     }
 }
 
@@ -49,14 +74,24 @@ where
     F: Fn(&dyn Row) -> Result<T> + Send + Sync,
 {
     async fn create(&self, input: InsertInput) -> Result<T> {
-        let (sql, params) = crate::internal::build_insert(&input)?;
+        let normalized = InsertInput {
+            table: self.table.clone(),
+            values: input.values,
+        };
+
+        let (sql, params) = crate::internal::build_insert(&normalized)?;
         let mut query = Query::new(sql);
         for p in params {
             query = query.bind(p);
         }
         let res = self.db.execute(query).await?;
         let id = res.last_insert_id.ok_or_else(|| DbError::Database {
-            message: "no last insert id returned".into(),
+            message: format!(
+                "insert into `{}` did not produce an auto-increment id; \
+                 EntityRepository::create requires the primary key to be \
+                 an AUTO_INCREMENT integer column",
+                self.table
+            ),
         })?;
         self.get_by_id(&Value::Uint(id))
             .await?
@@ -76,16 +111,19 @@ where
         }
     }
 
-    async fn update(&self, id: &Value, input: UpdateInput) -> Result<T> {
-        let mut update_input = input;
-        update_input.filter = std::mem::take(&mut update_input.filter)
+    async fn update(&self, id: &Value, mut input: UpdateInput) -> Result<T> {
+        input.table = self.table.clone();
+        input.filter = std::mem::take(&mut input.filter)
             .add(Condition::eq(self.pk.as_str(), id.clone()));
-        let (sql, params) = crate::internal::build_update(&update_input)?;
+
+        let (sql, params) = crate::internal::build_update(&input)?;
         let mut query = Query::new(sql);
         for p in params {
             query = query.bind(p);
         }
         self.db.execute(query).await.map(|_| ())?;
+
+        // NOTE: MySQL reports `rows_affected == 0` both for a no-op
         self.get_by_id(id).await?.ok_or(DbError::NotFound)
     }
 
@@ -97,11 +135,14 @@ where
         for p in params {
             query = query.bind(p);
         }
+        // NOTE: a delete on a non-existent row is a silent success
         self.db.execute(query).await.map(|_| ())?;
         Ok(())
     }
 
     async fn list(&self, filter: Filter, page: PageRequest) -> Result<Paginated<T>> {
+        validate_pagination(&page)?;
+
         let (where_sql, params) = crate::internal::build_filter(&filter)?;
 
         let count_sql = format!("SELECT COUNT(*) AS cnt FROM `{}`{}", self.table, where_sql);
@@ -113,6 +154,7 @@ where
         let count_i64 = count_row.get("cnt")?.as_i64().unwrap_or(0);
         let total = u64::try_from(count_i64).unwrap_or(0);
 
+        // NOTE: count and data are two separate statements. If the
         let select_sql = format!("SELECT * FROM `{}`{}", self.table, where_sql);
         let mut select_query = Query::new(select_sql);
         for p in params {
