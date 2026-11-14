@@ -1,26 +1,28 @@
-//! * [`exec_raw_text`] is called from inside `#[async_trait]` impls
-//!   `#[async_trait]` generates - the compiler rejects the future with
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use db_handler::validation::validate_identifier;
 use db_handler::{Column, ColumnDef, DataType, DbError, Result, Row, Table, TableChange, Value};
 use sqlx::mysql::{MySql, MySqlArguments, MySqlRow};
+use sqlx::pool::PoolConnection;
 use sqlx::query::Query as SqlxQuery;
 use sqlx::TypeInfo;
 use sqlx::{Column as _, Row as _};
 
-/// `RawSql` is incompatible with `#[async_trait]`'s boxed futures (see
-/// module docs). This helper exists so call sites inside `#[async_trait]`
 pub(crate) async fn exec_raw_text(
-    conn: &mut sqlx::mysql::MySqlConnection,
-    sql: &str,
-) -> Result<()> {
-    sqlx::query(sql)
-        .execute(conn)
-        .await
-        .map(|_| ())
-        .map_err(|e| DbError::Database {
-            message: e.to_string(),
-        })
+    conn: PoolConnection<MySql>,
+    sql: String,
+) -> Result<PoolConnection<MySql>> {
+    tokio::spawn(async move {
+        sqlx::raw_sql(&sql)
+            .execute(&mut conn)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok::<_, String>(conn)
+    })
+    .await
+    .map_err(|e| DbError::Database {
+        message: format!("raw SQL task failed: {e}"),
+    })?
+    .map_err(|e| DbError::Database { message: e })
 }
 
 pub(crate) fn bind_value(

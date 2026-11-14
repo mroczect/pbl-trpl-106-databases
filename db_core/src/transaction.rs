@@ -70,33 +70,39 @@ impl db_handler::Transaction for MySqlTransaction {
 
     async fn savepoint(&mut self, name: &str) -> Result<()> {
         validate_identifier(name)?;
+        let sql = format!("SAVEPOINT `{name}`");
         let mut guard = self.conn.lock().await;
-        let conn = guard.as_mut().ok_or_else(|| DbError::Database {
+        let conn = guard.take().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(conn, &format!("SAVEPOINT `{name}`")).await?;
+        let conn = crate::internal::exec_raw_text(conn, sql).await?;
+        *guard = Some(conn);
         drop(guard);
         Ok(())
     }
 
     async fn rollback_to(&mut self, name: &str) -> Result<()> {
         validate_identifier(name)?;
+        let sql = format!("ROLLBACK TO SAVEPOINT `{name}`");
         let mut guard = self.conn.lock().await;
-        let conn = guard.as_mut().ok_or_else(|| DbError::Database {
+        let conn = guard.take().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(conn, &format!("ROLLBACK TO SAVEPOINT `{name}`")).await?;
+        let conn = crate::internal::exec_raw_text(conn, sql).await?;
+        *guard = Some(conn);
         drop(guard);
         Ok(())
     }
 
     async fn release_savepoint(&mut self, name: &str) -> Result<()> {
         validate_identifier(name)?;
+        let sql = format!("RELEASE SAVEPOINT `{name}`");
         let mut guard = self.conn.lock().await;
-        let conn = guard.as_mut().ok_or_else(|| DbError::Database {
+        let conn = guard.take().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(conn, &format!("RELEASE SAVEPOINT `{name}`")).await?;
+        let conn = crate::internal::exec_raw_text(conn, sql).await?;
+        *guard = Some(conn);
         drop(guard);
         Ok(())
     }

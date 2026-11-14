@@ -301,16 +301,10 @@ impl Executor for Database {
 #[async_trait::async_trait]
 impl TransactionManager for Database {
     async fn begin(&self) -> Result<Box<dyn db_handler::Transaction>> {
-        let mut conn = self.pool.acquire().await.map_err(|e| DbError::Connection {
+        let conn = self.pool.acquire().await.map_err(|e| DbError::Connection {
             message: e.to_string(),
         })?;
-        sqlx::query("START TRANSACTION")
-            .execute(&mut *conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
+        let conn = crate::internal::exec_raw_text(conn, "START TRANSACTION".to_string()).await?;
         Ok(Box::new(MySqlTransaction::new(conn)))
     }
 
@@ -325,15 +319,15 @@ impl TransactionManager for Database {
             IsolationLevel::RepeatableRead => "REPEATABLE READ",
             IsolationLevel::Serializable => "SERIALIZABLE",
         };
-        let mut conn = self.pool.acquire().await.map_err(|e| DbError::Connection {
+        let conn = self.pool.acquire().await.map_err(|e| DbError::Connection {
             message: e.to_string(),
         })?;
-        crate::internal::exec_raw_text(
-            &mut conn,
-            &format!("SET TRANSACTION ISOLATION LEVEL {level_sql}"),
+        let conn = crate::internal::exec_raw_text(
+            conn,
+            format!("SET TRANSACTION ISOLATION LEVEL {level_sql}"),
         )
         .await?;
-        crate::internal::exec_raw_text(&mut conn, "START TRANSACTION").await?;
+        let conn = crate::internal::exec_raw_text(conn, "START TRANSACTION".to_string()).await?;
         Ok(Box::new(MySqlTransaction::new(conn)))
     }
 }
