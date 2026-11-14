@@ -14,7 +14,7 @@ pub(crate) async fn exec_raw_text(
     tokio::task::spawn_blocking(move || {
         let mut conn = conn;
         pollster::block_on(async {
-            sqlx::raw_sql(&sql)
+            let _ = sqlx::raw_sql(&sql)
                 .execute(&mut *conn)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -417,5 +417,785 @@ fn build_condition(cond: &db_handler::Condition) -> Result<(String, Vec<Value>)>
             }
             Ok((format!("({})", parts.join(" OR ")), params))
         }
+    }
+}
+
+
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::too_many_lines,
+    clippy::items_after_statements,
+    clippy::must_use_candidate,
+    clippy::similar_names,
+    clippy::redundant_clone,
+    clippy::needless_pass_by_value,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::unreadable_literal,
+    unused_results
+)]
+mod tests {
+    use super::*;
+    use db_handler::{
+        Condition, Constraint, ConstraintKind, DeleteInput, Filter, Index, InsertInput, UpdateInput,
+    };
+
+    fn filter_with(cond: Condition) -> Filter {
+        Filter::new().add(cond)
+    }
+
+
+    #[test]
+    fn data_type_sql_fixed_variants() {
+        let cases = [
+            (DataType::Int, "INT"),
+            (DataType::BigInt, "BIGINT"),
+            (DataType::SmallInt, "SMALLINT"),
+            (DataType::Text, "TEXT"),
+            (DataType::Boolean, "TINYINT(1)"),
+            (DataType::Timestamp, "TIMESTAMP"),
+            (DataType::Date, "DATE"),
+            (DataType::Float, "FLOAT"),
+            (DataType::Double, "DOUBLE"),
+            (DataType::Blob, "BLOB"),
+        ];
+        for (dt, expected) in cases {
+            assert_eq!(data_type_sql(dt), expected, "for {dt:?}");
+        }
+    }
+
+    #[test]
+    fn data_type_sql_varchar_embeds_length() {
+        assert_eq!(data_type_sql(DataType::Varchar(255)), "VARCHAR(255)");
+        assert_eq!(data_type_sql(DataType::Varchar(0)), "VARCHAR(0)");
+        assert_eq!(
+            data_type_sql(DataType::Varchar(u32::MAX)),
+            format!("VARCHAR({})", u32::MAX)
+        );
+    }
+
+
+    #[test]
+    fn value_to_sql_literal_null() {
+        assert_eq!(value_to_sql_literal(&Value::Null).unwrap(), "NULL");
+    }
+
+    #[test]
+    fn value_to_sql_literal_bool() {
+        assert_eq!(value_to_sql_literal(&Value::Bool(true)).unwrap(), "TRUE");
+        assert_eq!(value_to_sql_literal(&Value::Bool(false)).unwrap(), "FALSE");
+    }
+
+    #[test]
+    fn value_to_sql_literal_int_edges() {
+        assert_eq!(value_to_sql_literal(&Value::Int(0)).unwrap(), "0");
+        assert_eq!(value_to_sql_literal(&Value::Int(42)).unwrap(), "42");
+        assert_eq!(value_to_sql_literal(&Value::Int(-1)).unwrap(), "-1");
+        assert_eq!(
+            value_to_sql_literal(&Value::Int(i64::MAX)).unwrap(),
+            i64::MAX.to_string()
+        );
+        assert_eq!(
+            value_to_sql_literal(&Value::Int(i64::MIN)).unwrap(),
+            i64::MIN.to_string()
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_uint_edges() {
+        assert_eq!(value_to_sql_literal(&Value::Uint(0)).unwrap(), "0");
+        assert_eq!(
+            value_to_sql_literal(&Value::Uint(u64::MAX)).unwrap(),
+            u64::MAX.to_string()
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_float_finite() {
+        assert_eq!(value_to_sql_literal(&Value::Float(1.5)).unwrap(), "1.5");
+        assert_eq!(value_to_sql_literal(&Value::Float(-2.5)).unwrap(), "-2.5");
+    }
+
+    #[test]
+    fn value_to_sql_literal_float_non_finite_rejected() {
+        assert!(value_to_sql_literal(&Value::Float(f64::NAN)).is_err());
+        assert!(value_to_sql_literal(&Value::Float(f64::INFINITY)).is_err());
+        assert!(value_to_sql_literal(&Value::Float(f64::NEG_INFINITY)).is_err());
+    }
+
+    #[test]
+    fn value_to_sql_literal_string_simple_and_empty() {
+        assert_eq!(
+            value_to_sql_literal(&Value::String("hi".into())).unwrap(),
+            "'hi'"
+        );
+        assert_eq!(
+            value_to_sql_literal(&Value::String(String::new())).unwrap(),
+            "''"
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_string_escapes_single_quotes() {
+        assert_eq!(
+            value_to_sql_literal(&Value::String("O'Brien".into())).unwrap(),
+            "'O''Brien'"
+        );
+        assert_eq!(
+            value_to_sql_literal(&Value::String("'''".into())).unwrap(),
+            "''''''''"
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_string_preserves_unicode_and_control() {
+        assert_eq!(
+            value_to_sql_literal(&Value::String("日本語🔥".into())).unwrap(),
+            "'日本語🔥'"
+        );
+        assert_eq!(
+            value_to_sql_literal(&Value::String("a\nb\tc".into())).unwrap(),
+            "'a\nb\tc'"
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_timestamp_behaves_like_string() {
+        assert_eq!(
+            value_to_sql_literal(&Value::Timestamp("2026-01-01".into())).unwrap(),
+            "'2026-01-01'"
+        );
+        assert_eq!(
+            value_to_sql_literal(&Value::Timestamp("a'b".into())).unwrap(),
+            "'a''b'"
+        );
+    }
+
+    #[test]
+    fn value_to_sql_literal_bytes_rejected() {
+        let err = value_to_sql_literal(&Value::Bytes(vec![1, 2, 3])).unwrap_err();
+        assert!(matches!(err, DbError::Validation { .. }));
+    }
+
+
+    #[test]
+    fn column_def_sql_minimal_is_not_null() {
+        let cd = ColumnDef::new("id", DataType::Int);
+        assert_eq!(column_def_sql(&cd).unwrap(), "`id` INT NOT NULL");
+    }
+
+    #[test]
+    fn column_def_sql_nullable_omits_not_null() {
+        let cd = ColumnDef::new("bio", DataType::Text).nullable(true);
+        assert_eq!(column_def_sql(&cd).unwrap(), "`bio` TEXT");
+    }
+
+    #[test]
+    fn column_def_sql_primary_key_implies_not_null() {
+        let cd = ColumnDef::new("id", DataType::BigInt).primary_key();
+        let sql = column_def_sql(&cd).unwrap();
+        assert!(sql.contains("PRIMARY KEY"));
+        assert!(sql.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn column_def_sql_auto_increment() {
+        let cd = ColumnDef::new("id", DataType::BigInt).auto_increment();
+        assert!(column_def_sql(&cd).unwrap().contains("AUTO_INCREMENT"));
+    }
+
+    #[test]
+    fn column_def_sql_unique() {
+        let cd = ColumnDef::new("email", DataType::Varchar(255)).unique();
+        assert!(column_def_sql(&cd).unwrap().contains("UNIQUE"));
+    }
+
+    #[test]
+    fn column_def_sql_all_flags_together() {
+        let cd = ColumnDef::new("id", DataType::BigInt)
+            .primary_key()
+            .auto_increment()
+            .unique();
+        let sql = column_def_sql(&cd).unwrap();
+        assert!(sql.contains("PRIMARY KEY"));
+        assert!(sql.contains("AUTO_INCREMENT"));
+        assert!(sql.contains("UNIQUE"));
+        assert!(sql.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn column_def_sql_default_variants() {
+        let cases = [
+            (DataType::Int, Value::Int(0), "DEFAULT 0"),
+            (DataType::Boolean, Value::Bool(true), "DEFAULT TRUE"),
+            (
+                DataType::Varchar(100),
+                Value::String("anon".into()),
+                "DEFAULT 'anon'",
+            ),
+            (DataType::Text, Value::Null, "DEFAULT NULL"),
+        ];
+        for (dt, default, expected) in cases {
+            let mut cd = ColumnDef::new("c", dt).nullable(true);
+            cd.default = Some(default);
+            assert!(
+                column_def_sql(&cd).unwrap().contains(expected),
+                "expected {expected} in {}",
+                column_def_sql(&cd).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn column_def_sql_default_nan_propagates_error() {
+        let mut cd = ColumnDef::new("x", DataType::Float).nullable(true);
+        cd.default = Some(Value::Float(f64::NAN));
+        assert!(column_def_sql(&cd).is_err());
+    }
+
+    #[test]
+    fn column_def_sql_invalid_name_rejected() {
+        for bad in ["", "has space", "1abc", "x;drop"] {
+            let cd = ColumnDef::new(bad, DataType::Int);
+            assert!(column_def_sql(&cd).is_err(), "name {bad:?} should fail");
+        }
+    }
+
+
+    #[test]
+    fn build_create_table_single_column() {
+        let t = Table::new(
+            "users",
+            vec![ColumnDef::new("id", DataType::BigInt).primary_key()],
+        );
+        let sql = build_create_table(&t).unwrap();
+        assert!(sql.starts_with("CREATE TABLE `users` ("));
+        assert!(sql.contains("`id` BIGINT"));
+    }
+
+    #[test]
+    fn build_create_table_multiple_columns() {
+        let t = Table::new(
+            "users",
+            vec![
+                ColumnDef::new("id", DataType::BigInt).primary_key(),
+                ColumnDef::new("email", DataType::Varchar(255)).unique(),
+                ColumnDef::new("bio", DataType::Text).nullable(true),
+            ],
+        );
+        let sql = build_create_table(&t).unwrap();
+        for col in ["`id`", "`email`", "`bio`"] {
+            assert!(sql.contains(col), "missing {col} in {sql}");
+        }
+    }
+
+    #[test]
+    fn build_create_table_empty_columns_rejected() {
+        let err = build_create_table(&Table::new("t", vec![])).unwrap_err();
+        assert!(matches!(err, DbError::Validation { .. }));
+    }
+
+    #[test]
+    fn build_create_table_invalid_table_rejected() {
+        assert!(build_create_table(&Table::new(
+            "bad name",
+            vec![ColumnDef::new("id", DataType::Int)],
+        ))
+        .is_err());
+        assert!(build_create_table(&Table::new(
+            "",
+            vec![ColumnDef::new("id", DataType::Int)],
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn build_create_table_invalid_column_rejected() {
+        assert!(build_create_table(&Table::new(
+            "t",
+            vec![ColumnDef::new("1bad", DataType::Int)],
+        ))
+        .is_err());
+    }
+
+
+    #[test]
+    fn table_change_add_column() {
+        let c = TableChange::AddColumn(ColumnDef::new("bio", DataType::Text).nullable(true));
+        assert_eq!(table_change_sql(&c).unwrap(), "ADD COLUMN `bio` TEXT");
+    }
+
+    #[test]
+    fn table_change_drop_column() {
+        let c = TableChange::DropColumn("bio".into());
+        assert_eq!(table_change_sql(&c).unwrap(), "DROP COLUMN `bio`");
+    }
+
+    #[test]
+    fn table_change_rename_column() {
+        let c = TableChange::RenameColumn {
+            from: "a".into(),
+            to: "b".into(),
+        };
+        assert_eq!(table_change_sql(&c).unwrap(), "RENAME COLUMN `a` TO `b`");
+    }
+
+    #[test]
+    fn table_change_modify_column() {
+        let c = TableChange::ModifyColumn(ColumnDef::new("id", DataType::BigInt).nullable(true));
+        assert_eq!(table_change_sql(&c).unwrap(), "MODIFY COLUMN `id` BIGINT");
+    }
+
+    #[test]
+    fn table_change_add_index_variants() {
+        let non_unique = TableChange::AddIndex(Index::new("idx", vec!["a".into(), "b".into()]));
+        assert_eq!(
+            table_change_sql(&non_unique).unwrap(),
+            "ADD INDEX `idx` (`a`, `b`)"
+        );
+
+        let unique = TableChange::AddIndex(Index::new("idx", vec!["a".into()]).unique());
+        assert_eq!(
+            table_change_sql(&unique).unwrap(),
+            "ADD UNIQUE INDEX `idx` (`a`)"
+        );
+    }
+
+    #[test]
+    fn table_change_drop_index() {
+        let c = TableChange::DropIndex("idx".into());
+        assert_eq!(table_change_sql(&c).unwrap(), "DROP INDEX `idx`");
+    }
+
+    #[test]
+    fn table_change_add_constraint_is_unimplemented() {
+        let c = TableChange::AddConstraint(Constraint::new("pk", ConstraintKind::PrimaryKey));
+        let err = table_change_sql(&c).unwrap_err();
+        let DbError::Validation { message } = err else {
+            panic!("expected Validation error");
+        };
+        assert!(message.contains("not yet implemented"), "was {message}");
+    }
+
+    #[test]
+    fn table_change_drop_constraint() {
+        let c = TableChange::DropConstraint("pk".into());
+        assert_eq!(table_change_sql(&c).unwrap(), "DROP CONSTRAINT `pk`");
+    }
+
+    #[test]
+    fn table_change_invalid_identifiers_rejected() {
+        assert!(table_change_sql(&TableChange::AddColumn(ColumnDef::new(
+            "bad name",
+            DataType::Int,
+        )))
+        .is_err());
+        assert!(table_change_sql(&TableChange::AddIndex(Index::new(
+            "bad idx",
+            vec!["a".into()],
+        )))
+        .is_err());
+        assert!(table_change_sql(&TableChange::AddIndex(Index::new(
+            "idx",
+            vec!["bad col".into()],
+        )))
+        .is_err());
+    }
+
+
+    #[test]
+    fn build_insert_single_value() {
+        let input = InsertInput::new("users").set("name", "Alice");
+        let (sql, params) = build_insert(&input).unwrap();
+        assert_eq!(sql, "INSERT INTO `users` (`name`) VALUES (?)");
+        assert_eq!(params, vec![Value::String("Alice".into())]);
+    }
+
+    #[test]
+    fn build_insert_multiple_values_preserve_order() {
+        let input = InsertInput::new("users")
+            .set("name", "Alice")
+            .set("age", 30i64)
+            .set("active", true);
+        let (sql, params) = build_insert(&input).unwrap();
+        assert_eq!(
+            sql,
+            "INSERT INTO `users` (`name`, `age`, `active`) VALUES (?, ?, ?)"
+        );
+        assert_eq!(
+            params,
+            vec![
+                Value::String("Alice".into()),
+                Value::Int(30),
+                Value::Bool(true),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_insert_preserves_every_value_variant() {
+        let input = InsertInput::new("t")
+            .set("a", Value::Null)
+            .set("b", true)
+            .set("c", 42i64)
+            .set("d", 42u64)
+            .set("e", 1.5f64)
+            .set("f", "text")
+            .set("g", vec![1u8, 2u8]);
+        let (_, params) = build_insert(&input).unwrap();
+        assert_eq!(
+            params,
+            vec![
+                Value::Null,
+                Value::Bool(true),
+                Value::Int(42),
+                Value::Uint(42),
+                Value::Float(1.5),
+                Value::String("text".into()),
+                Value::Bytes(vec![1, 2]),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_insert_empty_values_rejected() {
+        let err = build_insert(&InsertInput::new("users")).unwrap_err();
+        assert!(matches!(err, DbError::Validation { .. }));
+    }
+
+    #[test]
+    fn build_insert_invalid_table_rejected() {
+        assert!(build_insert(&InsertInput::new("bad table").set("a", 1i64)).is_err());
+    }
+
+    #[test]
+    fn build_insert_invalid_column_rejected() {
+        assert!(build_insert(&InsertInput::new("t").set("bad col", 1i64)).is_err());
+    }
+
+
+    #[test]
+    fn build_update_without_filter() {
+        let input = UpdateInput::new("users").set("name", "Bob");
+        let (sql, params) = build_update(&input).unwrap();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ?");
+        assert_eq!(params, vec![Value::String("Bob".into())]);
+    }
+
+    #[test]
+    fn build_update_appends_where_params_after_set_params() {
+        let filter = Filter::new().add(Condition::eq("id", 1i64));
+        let input = UpdateInput::new("users").set("name", "Bob").where_(filter);
+        let (sql, params) = build_update(&input).unwrap();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+        assert_eq!(params, vec![Value::String("Bob".into()), Value::Int(1)]);
+    }
+
+    #[test]
+    fn build_update_empty_set_rejected() {
+        let err = build_update(&UpdateInput::new("users")).unwrap_err();
+        assert!(matches!(err, DbError::Validation { .. }));
+    }
+
+    #[test]
+    fn build_update_invalid_table_rejected() {
+        assert!(build_update(&UpdateInput::new("bad table").set("a", 1i64)).is_err());
+    }
+
+    #[test]
+    fn build_update_invalid_set_column_rejected() {
+        assert!(build_update(&UpdateInput::new("t").set("bad col", 1i64)).is_err());
+    }
+
+
+    #[test]
+    fn build_delete_without_filter() {
+        let (sql, params) = build_delete(&DeleteInput::new("users")).unwrap();
+        assert_eq!(sql, "DELETE FROM `users`");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn build_delete_with_filter() {
+        let filter = Filter::new().add(Condition::eq("id", 1i64));
+        let input = DeleteInput::new("users").where_(filter);
+        let (sql, params) = build_delete(&input).unwrap();
+        assert_eq!(sql, "DELETE FROM `users` WHERE `id` = ?");
+        assert_eq!(params, vec![Value::Int(1)]);
+    }
+
+    #[test]
+    fn build_delete_invalid_table_rejected() {
+        assert!(build_delete(&DeleteInput::new("bad table")).is_err());
+    }
+
+    #[test]
+    fn build_delete_invalid_column_rejected() {
+        let f = Filter::new().add(Condition::eq("bad col", 1i64));
+        assert!(build_delete(&DeleteInput::new("t").where_(f)).is_err());
+    }
+
+
+    #[test]
+    fn build_filter_empty_is_empty_string() {
+        let (sql, params) = build_filter(&Filter::new()).unwrap();
+        assert_eq!(sql, "");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn build_filter_single_eq() {
+        let (sql, params) = build_filter(&filter_with(Condition::eq("id", 42i64))).unwrap();
+        assert_eq!(sql, " WHERE `id` = ?");
+        assert_eq!(params, vec![Value::Int(42)]);
+    }
+
+    #[test]
+    fn build_filter_comparison_operators() {
+        let cases = [
+            (
+                Condition::Ne {
+                    column: "x".into(),
+                    value: Value::Int(1),
+                },
+                "`x` != ?",
+            ),
+            (
+                Condition::Lt {
+                    column: "x".into(),
+                    value: Value::Int(1),
+                },
+                "`x` < ?",
+            ),
+            (
+                Condition::Le {
+                    column: "x".into(),
+                    value: Value::Int(1),
+                },
+                "`x` <= ?",
+            ),
+            (
+                Condition::Gt {
+                    column: "x".into(),
+                    value: Value::Int(1),
+                },
+                "`x` > ?",
+            ),
+            (
+                Condition::Ge {
+                    column: "x".into(),
+                    value: Value::Int(1),
+                },
+                "`x` >= ?",
+            ),
+        ];
+        for (cond, expected) in cases {
+            let (sql, _) = build_filter(&filter_with(cond)).unwrap();
+            assert_eq!(sql, format!(" WHERE {expected}"));
+        }
+    }
+
+    #[test]
+    fn build_filter_in_with_values() {
+        let cond = Condition::In {
+            column: "id".into(),
+            values: vec![Value::Int(1), Value::Int(2), Value::Int(3)],
+        };
+        let (sql, params) = build_filter(&filter_with(cond)).unwrap();
+        assert_eq!(sql, " WHERE `id` IN (?, ?, ?)");
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn build_filter_in_empty_becomes_always_false() {
+        let cond = Condition::In {
+            column: "id".into(),
+            values: vec![],
+        };
+        let (sql, params) = build_filter(&filter_with(cond)).unwrap();
+        assert_eq!(sql, " WHERE 1=0");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn build_filter_is_null_and_not_null() {
+        let (sql, p) = build_filter(&filter_with(Condition::is_null("deleted_at"))).unwrap();
+        assert_eq!(sql, " WHERE `deleted_at` IS NULL");
+        assert!(p.is_empty());
+
+        let (sql, p) = build_filter(&filter_with(Condition::IsNotNull {
+            column: "id".into(),
+        }))
+        .unwrap();
+        assert_eq!(sql, " WHERE `id` IS NOT NULL");
+        assert!(p.is_empty());
+    }
+
+    #[test]
+    fn build_filter_empty_and_or_degenerate() {
+        let (sql, p) = build_filter(&filter_with(Condition::And(vec![]))).unwrap();
+        assert_eq!(sql, " WHERE 1=1");
+        assert!(p.is_empty());
+
+        let (sql, p) = build_filter(&filter_with(Condition::Or(vec![]))).unwrap();
+        assert_eq!(sql, " WHERE 1=0");
+        assert!(p.is_empty());
+    }
+
+    #[test]
+    fn build_filter_and_or_join_and_collect_params() {
+        let and_cond = Condition::And(vec![
+            Condition::eq("a", 1i64),
+            Condition::eq("b", 2i64),
+        ]);
+        let (sql, params) = build_filter(&filter_with(and_cond)).unwrap();
+        assert_eq!(sql, " WHERE (`a` = ? AND `b` = ?)");
+        assert_eq!(params, vec![Value::Int(1), Value::Int(2)]);
+
+        let or_cond = Condition::Or(vec![
+            Condition::eq("a", 1i64),
+            Condition::eq("b", 2i64),
+        ]);
+        let (sql, params) = build_filter(&filter_with(or_cond)).unwrap();
+        assert_eq!(sql, " WHERE (`a` = ? OR `b` = ?)");
+        assert_eq!(params, vec![Value::Int(1), Value::Int(2)]);
+    }
+
+    #[test]
+    fn build_filter_nested_and_or() {
+        let inner = Condition::And(vec![
+            Condition::eq("a", 1i64),
+            Condition::eq("b", 2i64),
+        ]);
+        let cond = Condition::Or(vec![inner, Condition::eq("c", 3i64)]);
+        let (sql, params) = build_filter(&filter_with(cond)).unwrap();
+        assert_eq!(sql, " WHERE ((`a` = ? AND `b` = ?) OR `c` = ?)");
+        assert_eq!(params, vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+    }
+
+    #[test]
+    fn build_filter_multiple_top_level_joined_with_and() {
+        let f = Filter::new()
+            .add(Condition::eq("a", 1i64))
+            .add(Condition::eq("b", 2i64));
+        let (sql, params) = build_filter(&f).unwrap();
+        assert_eq!(sql, " WHERE `a` = ? AND `b` = ?");
+        assert_eq!(params, vec![Value::Int(1), Value::Int(2)]);
+    }
+
+    #[test]
+    fn build_filter_invalid_column_rejected() {
+        assert!(build_filter(&filter_with(Condition::eq("bad col", 1i64))).is_err());
+    }
+
+    #[test]
+    fn build_filter_nested_invalid_column_rejected() {
+        let cond = Condition::And(vec![Condition::eq("bad col", 1i64)]);
+        assert!(build_filter(&filter_with(cond)).is_err());
+    }
+
+
+    fn sample_wrapper() -> MySqlRowWrapper {
+        MySqlRowWrapper {
+            values: vec![
+                ("id".to_string(), Value::Int(42)),
+                ("name".to_string(), Value::String("Alice".into())),
+                ("active".to_string(), Value::Bool(true)),
+            ],
+            columns: vec![
+                Column::new("id", "BIGINT", false),
+                Column::new("name", "VARCHAR", false),
+                Column::new("active", "TINYINT", false),
+            ],
+        }
+    }
+
+    #[test]
+    fn wrapper_get_existing_columns() {
+        let w = sample_wrapper();
+        assert_eq!(w.get("id").unwrap(), &Value::Int(42));
+        assert_eq!(w.get("name").unwrap(), &Value::String("Alice".into()));
+        assert_eq!(w.get("active").unwrap(), &Value::Bool(true));
+    }
+
+    #[test]
+    fn wrapper_get_missing_column_is_validation_error() {
+        let err = sample_wrapper().get("nope").unwrap_err();
+        let DbError::Validation { message } = err else {
+            panic!("expected Validation");
+        };
+        assert!(message.contains("nope"), "message was {message}");
+    }
+
+    #[test]
+    fn wrapper_get_is_case_sensitive() {
+        let w = sample_wrapper();
+        assert!(w.get("ID").is_err());
+        assert!(w.get("Id").is_err());
+        assert!(w.get("id").is_ok());
+    }
+
+    #[test]
+    fn wrapper_returns_null_values() {
+        let w = MySqlRowWrapper {
+            values: vec![("x".to_string(), Value::Null)],
+            columns: vec![Column::new("x", "INT", true)],
+        };
+        assert_eq!(w.get("x").unwrap(), &Value::Null);
+    }
+
+    #[test]
+    fn wrapper_len_and_columns_agree() {
+        let w = sample_wrapper();
+        assert_eq!(w.len(), 3);
+        assert_eq!(w.columns().len(), 3);
+    }
+
+    #[test]
+    fn wrapper_is_empty() {
+        let empty = MySqlRowWrapper {
+            values: Vec::new(),
+            columns: Vec::new(),
+        };
+        assert!(empty.is_empty());
+        assert_eq!(empty.len(), 0);
+        assert!(!sample_wrapper().is_empty());
+    }
+
+    #[test]
+    fn wrapper_columns_preserves_order() {
+        let w = sample_wrapper();
+        let names: Vec<&str> = w.columns().iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["id", "name", "active"]);
+    }
+
+    #[test]
+    fn wrapper_duplicate_column_returns_first_match() {
+        let w = MySqlRowWrapper {
+            values: vec![
+                ("x".to_string(), Value::Int(1)),
+                ("x".to_string(), Value::Int(2)),
+            ],
+            columns: vec![
+                Column::new("x", "INT", true),
+                Column::new("x", "INT", true),
+            ],
+        };
+        assert_eq!(w.get("x").unwrap(), &Value::Int(1));
+    }
+
+    #[test]
+    fn wrapper_get_empty_name_matches_only_empty_string() {
+        let w = MySqlRowWrapper {
+            values: vec![(String::new(), Value::Int(1))],
+            columns: vec![Column::new("", "INT", true)],
+        };
+        assert_eq!(w.get("").unwrap(), &Value::Int(1));
+        assert!(w.get("x").is_err());
     }
 }
