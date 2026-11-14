@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 
+use crate::traits::core::Executor;
 use crate::types::core::IsolationLevel;
 use crate::Result;
 
 #[async_trait]
-pub trait Transaction: Send + Sync {
+pub trait Transaction: Executor {
     async fn commit(self: Box<Self>) -> Result<()>;
     async fn rollback(self: Box<Self>) -> Result<()>;
     async fn savepoint(&mut self, name: &str) -> Result<()>;
