@@ -14,9 +14,10 @@ homepage.workspace = true
 
 [dependencies]
 async-trait = "0.1.92"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 db_handler = { version = "0.1.0", path = "../db_handler" }
 dotenvy = "0.15.7"
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls", "macros", "migrate"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls", "macros", "migrate", "chrono"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
 [lints]
