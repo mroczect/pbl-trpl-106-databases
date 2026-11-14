@@ -13,13 +13,14 @@ pub(crate) async fn exec_raw_text(
 ) -> Result<PoolConnection<MySql>> {
     tokio::task::spawn_blocking(move || {
         let mut conn = conn;
-        pollster::block_on(async {
-            let _ = sqlx::raw_sql(&sql)
-                .execute(&mut *conn)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok::<_, String>(conn)
-        })
+        let result = pollster::block_on(sqlx::raw_sql(&sql).execute(&mut *conn));
+        match result {
+            Ok(_) => Ok(conn),
+            Err(e) => {
+                conn.close_on_drop();
+                Err(e.to_string())
+            }
+        }
     })
     .await
     .map_err(|e| DbError::Database {
