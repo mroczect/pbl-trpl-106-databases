@@ -1,3 +1,5 @@
+//! JSON helpers with unified `DbError` conversion.
+//! for `Value`, `Map`, `Number`, and error conversions, instead of
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -15,7 +17,7 @@ pub fn to_json<T: Serialize>(value: &T) -> Result<Json> {
 }
 
 pub fn from_json<T: DeserializeOwned>(json: &Json) -> Result<T> {
-    serde_json::from_value(json.clone()).map_err(DbError::from)
+    T::deserialize(json).map_err(DbError::from)
 }
 
 pub fn expect_object(json: &Json) -> Result<&Map<String, Json>> {

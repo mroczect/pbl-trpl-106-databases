@@ -1,19 +1,25 @@
+pub mod config;
 pub mod constants;
 pub mod error;
-pub mod id;
 pub mod json;
 pub mod prelude;
 pub mod traits;
 pub mod types;
 pub mod validation;
 
+pub use config::PoolConfig;
 pub use error::{DbError, Result};
-pub use id::Id;
 pub use json::Json;
 
-pub use traits::core::{Connection, DatabaseInfoProvider, HealthCheck, Transaction};
-pub use traits::repository::Repository;
+pub use traits::core::{
+    Connection, DatabaseInfoProvider, Executor, HealthCheck, MigrationRunner, SchemaManager,
+    Transaction, TransactionManager,
+};
+pub use traits::repository::CrudRepository;
 
 pub use types::core::{
-    DatabaseInfo, HealthDetails, HealthStatus, PageMeta, PageRequest, Paginated, SortDirection,
+    Column, ColumnDef, ColumnValue, Condition, Constraint, ConstraintKind, DataType, DatabaseInfo,
+    DeleteInput, ExecuteResult, Filter, HealthDetails, HealthStatus, Index, InsertInput,
+    IsolationLevel, Migration, MigrationState, MigrationStatus, PageMeta, PageRequest, Paginated,
+    Query, QueryResult, Row, SortDirection, Table, TableChange, UpdateInput, Value,
 };
