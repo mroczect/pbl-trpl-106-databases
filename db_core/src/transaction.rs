@@ -74,7 +74,7 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(&mut **conn, &format!("SAVEPOINT `{name}`")).await?;
+        crate::internal::exec_raw_text(conn, &format!("SAVEPOINT `{name}`")).await?;
         drop(guard);
         Ok(())
     }
@@ -85,8 +85,7 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(&mut **conn, &format!("ROLLBACK TO SAVEPOINT `{name}`"))
-            .await?;
+        crate::internal::exec_raw_text(conn, &format!("ROLLBACK TO SAVEPOINT `{name}`")).await?;
         drop(guard);
         Ok(())
     }
@@ -97,7 +96,7 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        crate::internal::exec_raw_text(&mut **conn, &format!("RELEASE SAVEPOINT `{name}`")).await?;
+        crate::internal::exec_raw_text(conn, &format!("RELEASE SAVEPOINT `{name}`")).await?;
         drop(guard);
         Ok(())
     }

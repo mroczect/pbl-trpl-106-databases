@@ -1,3 +1,5 @@
+//! * [`exec_raw_text`] is called from inside `#[async_trait]` impls
+//!   `#[async_trait]` generates - the compiler rejects the future with
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use db_handler::validation::validate_identifier;
 use db_handler::{Column, ColumnDef, DataType, DbError, Result, Row, Table, TableChange, Value};
@@ -6,12 +8,13 @@ use sqlx::query::Query as SqlxQuery;
 use sqlx::TypeInfo;
 use sqlx::{Column as _, Row as _};
 
-/// `#[async_trait]` impl triggers an "Executor is not general enough"
+/// `RawSql` is incompatible with `#[async_trait]`'s boxed futures (see
+/// module docs). This helper exists so call sites inside `#[async_trait]`
 pub(crate) async fn exec_raw_text(
     conn: &mut sqlx::mysql::MySqlConnection,
     sql: &str,
 ) -> Result<()> {
-    sqlx::raw_sql(sql)
+    sqlx::query(sql)
         .execute(conn)
         .await
         .map(|_| ())
@@ -80,8 +83,8 @@ pub(crate) struct MySqlRowWrapper {
 
 impl MySqlRowWrapper {
     pub(crate) fn from_row(row: &MySqlRow) -> Result<Self> {
-        let mut values = Vec::new();
-        let mut columns = Vec::new();
+        let mut values = Vec::with_capacity(row.len());
+        let mut columns = Vec::with_capacity(row.len());
         for col in row.columns() {
             let name = col.name().to_string();
             let data_type = col.type_info().name().to_string();
@@ -152,7 +155,14 @@ pub(crate) fn value_to_sql_literal(v: &Value) -> Result<String> {
         }
         Value::Int(i) => i.to_string(),
         Value::Uint(u) => u.to_string(),
-        Value::Float(f) => f.to_string(),
+        Value::Float(f) => {
+            if !f.is_finite() {
+                return Err(DbError::Validation {
+                    message: format!("cannot embed non-finite float ({f}) in DDL"),
+                });
+            }
+            f.to_string()
+        }
         Value::String(s) | Value::Timestamp(s) => {
             format!("'{}'", s.replace('\'', "''"))
         }
@@ -192,7 +202,7 @@ pub(crate) fn build_create_table(table: &Table) -> Result<String> {
             message: "table must have at least one column".into(),
         });
     }
-    let mut parts = Vec::new();
+    let mut parts = Vec::with_capacity(table.columns.len());
     for col in &table.columns {
         parts.push(column_def_sql(col)?);
     }
@@ -270,13 +280,14 @@ pub(crate) fn build_insert(input: &db_handler::InsertInput) -> Result<(String, V
             message: "insert must have at least one value".into(),
         });
     }
-    let mut cols = Vec::new();
-    let mut placeholders = Vec::new();
-    let mut params = Vec::new();
+    let n = input.values.len();
+    let mut cols = Vec::with_capacity(n);
+    let mut placeholders = Vec::with_capacity(n);
+    let mut params = Vec::with_capacity(n);
     for cv in &input.values {
         validate_identifier(&cv.column)?;
         cols.push(format!("`{}`", cv.column));
-        placeholders.push("?".to_string());
+        placeholders.push("?");
         params.push(cv.value.clone());
     }
     let sql = format!(
@@ -295,8 +306,8 @@ pub(crate) fn build_update(input: &db_handler::UpdateInput) -> Result<(String, V
             message: "update must have at least one set value".into(),
         });
     }
-    let mut sets = Vec::new();
-    let mut params = Vec::new();
+    let mut sets = Vec::with_capacity(input.set.len());
+    let mut params = Vec::with_capacity(input.set.len());
     for cv in &input.set {
         validate_identifier(&cv.column)?;
         sets.push(format!("`{}` = ?", cv.column));
@@ -324,7 +335,7 @@ pub(crate) fn build_filter(filter: &db_handler::Filter) -> Result<(String, Vec<V
     if filter.conditions.is_empty() {
         return Ok((String::new(), Vec::new()));
     }
-    let mut parts = Vec::new();
+    let mut parts = Vec::with_capacity(filter.conditions.len());
     let mut params = Vec::new();
     for cond in &filter.conditions {
         let (part, p) = build_condition(cond)?;
@@ -339,52 +350,49 @@ fn build_condition(cond: &db_handler::Condition) -> Result<(String, Vec<Value>)>
     match cond {
         Condition::Eq { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` = ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` = ?"), vec![value.clone()]))
         }
         Condition::Ne { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` != ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` != ?"), vec![value.clone()]))
         }
         Condition::Lt { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` < ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` < ?"), vec![value.clone()]))
         }
         Condition::Le { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` <= ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` <= ?"), vec![value.clone()]))
         }
         Condition::Gt { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` > ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` > ?"), vec![value.clone()]))
         }
         Condition::Ge { column, value } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` >= ?", column), vec![value.clone()]))
+            Ok((format!("`{column}` >= ?"), vec![value.clone()]))
         }
         Condition::In { column, values } => {
             validate_identifier(column)?;
             if values.is_empty() {
                 return Ok(("1=0".into(), Vec::new()));
             }
-            let placeholders = values.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            Ok((
-                format!("`{}` IN ({})", column, placeholders),
-                values.clone(),
-            ))
+            let placeholders = vec!["?"; values.len()].join(", ");
+            Ok((format!("`{column}` IN ({placeholders})"), values.clone()))
         }
         Condition::IsNull { column } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` IS NULL", column), Vec::new()))
+            Ok((format!("`{column}` IS NULL"), Vec::new()))
         }
         Condition::IsNotNull { column } => {
             validate_identifier(column)?;
-            Ok((format!("`{}` IS NOT NULL", column), Vec::new()))
+            Ok((format!("`{column}` IS NOT NULL"), Vec::new()))
         }
         Condition::And(conds) => {
             if conds.is_empty() {
                 return Ok(("1=1".into(), Vec::new()));
             }
-            let (mut parts, mut params) = (Vec::new(), Vec::new());
+            let (mut parts, mut params) = (Vec::with_capacity(conds.len()), Vec::new());
             for c in conds {
                 let (p, ps) = build_condition(c)?;
                 parts.push(p);
@@ -396,7 +404,7 @@ fn build_condition(cond: &db_handler::Condition) -> Result<(String, Vec<Value>)>
             if conds.is_empty() {
                 return Ok(("1=0".into(), Vec::new()));
             }
-            let (mut parts, mut params) = (Vec::new(), Vec::new());
+            let (mut parts, mut params) = (Vec::with_capacity(conds.len()), Vec::new());
             for c in conds {
                 let (p, ps) = build_condition(c)?;
                 parts.push(p);

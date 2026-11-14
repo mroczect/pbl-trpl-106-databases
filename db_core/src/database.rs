@@ -329,11 +329,11 @@ impl TransactionManager for Database {
             message: e.to_string(),
         })?;
         crate::internal::exec_raw_text(
-            &mut *conn,
+            &mut conn,
             &format!("SET TRANSACTION ISOLATION LEVEL {level_sql}"),
         )
         .await?;
-        crate::internal::exec_raw_text(&mut *conn, "START TRANSACTION").await?;
+        crate::internal::exec_raw_text(&mut conn, "START TRANSACTION").await?;
         Ok(Box::new(MySqlTransaction::new(conn)))
     }
 }
