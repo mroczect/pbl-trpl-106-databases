@@ -6,6 +6,20 @@ use sqlx::query::Query as SqlxQuery;
 use sqlx::TypeInfo;
 use sqlx::{Column as _, Row as _};
 
+/// `#[async_trait]` impl triggers an "Executor is not general enough"
+pub(crate) async fn exec_raw_text(
+    conn: &mut sqlx::mysql::MySqlConnection,
+    sql: &str,
+) -> Result<()> {
+    sqlx::raw_sql(sql)
+        .execute(conn)
+        .await
+        .map(|_| ())
+        .map_err(|e| DbError::Database {
+            message: e.to_string(),
+        })
+}
+
 pub(crate) fn bind_value(
     q: SqlxQuery<'_, MySql, MySqlArguments>,
     v: Value,

@@ -32,3 +32,5 @@ rustc-ice-*.txt
 .sqlx/
 .snapcat.md
 .velodiff_dist.diff
+
+*.bak

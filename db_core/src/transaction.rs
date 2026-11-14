@@ -74,13 +74,7 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        sqlx::query(&format!("SAVEPOINT `{name}`"))
-            .execute(&mut **conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
+        crate::internal::exec_raw_text(&mut **conn, &format!("SAVEPOINT `{name}`")).await?;
         drop(guard);
         Ok(())
     }
@@ -91,13 +85,8 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        sqlx::query(&format!("ROLLBACK TO SAVEPOINT `{name}`"))
-            .execute(&mut **conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
+        crate::internal::exec_raw_text(&mut **conn, &format!("ROLLBACK TO SAVEPOINT `{name}`"))
+            .await?;
         drop(guard);
         Ok(())
     }
@@ -108,13 +97,7 @@ impl db_handler::Transaction for MySqlTransaction {
         let conn = guard.as_mut().ok_or_else(|| DbError::Database {
             message: "transaction already consumed".into(),
         })?;
-        sqlx::query(&format!("RELEASE SAVEPOINT `{name}`"))
-            .execute(&mut **conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
+        crate::internal::exec_raw_text(&mut **conn, &format!("RELEASE SAVEPOINT `{name}`")).await?;
         drop(guard);
         Ok(())
     }

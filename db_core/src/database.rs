@@ -328,20 +328,12 @@ impl TransactionManager for Database {
         let mut conn = self.pool.acquire().await.map_err(|e| DbError::Connection {
             message: e.to_string(),
         })?;
-        sqlx::query(&format!("SET TRANSACTION ISOLATION LEVEL {level_sql}"))
-            .execute(&mut *conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
-        sqlx::query("START TRANSACTION")
-            .execute(&mut *conn)
-            .await
-            .map(|_| ())
-            .map_err(|e| DbError::Database {
-                message: e.to_string(),
-            })?;
+        crate::internal::exec_raw_text(
+            &mut *conn,
+            &format!("SET TRANSACTION ISOLATION LEVEL {level_sql}"),
+        )
+        .await?;
+        crate::internal::exec_raw_text(&mut *conn, "START TRANSACTION").await?;
         Ok(Box::new(MySqlTransaction::new(conn)))
     }
 }
@@ -460,8 +452,9 @@ impl SchemaManager for Database {
     }
 
     async fn list_tables(&self) -> Result<Vec<String>> {
-        let sql =
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()";
+        let sql = "SELECT CAST(table_name AS CHAR) AS table_name \
+                   FROM information_schema.tables \
+                   WHERE table_schema = DATABASE()";
         sqlx::query_scalar::<_, String>(sql)
             .fetch_all(&self.pool)
             .await
@@ -531,7 +524,7 @@ impl MigrationRunner for Database {
                         .await
                         .map(|_| ())
                         .map_err(|e| DbError::Database {
-                        message: format!("failed to rollback migration {}: {}", m.version, e),
+                            message: format!("failed to rollback migration {}: {}", m.version, e),
                         })?;
                 }
                 sqlx::query("DELETE FROM `_migrations` WHERE version = ?")
