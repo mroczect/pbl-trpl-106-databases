@@ -1,4 +1,4 @@
 pub mod database;
-pub mod transaction;
 
 pub use database::Database;
+pub use db_handler::PoolConfig;

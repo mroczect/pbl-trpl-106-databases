@@ -1,10 +1,11 @@
 use std::time::{Duration, Instant};
 
 use db_handler::{
-    constants::HEALTH_TIMEOUT_MS, json, Connection, DatabaseInfo, DatabaseInfoProvider, DbError,
-    HealthCheck, HealthDetails, HealthStatus, Json, Result, Transaction,
+    constants::HEALTH_TIMEOUT_MS, Connection, DatabaseInfo, DatabaseInfoProvider, DbError,
+    HealthCheck, HealthDetails, HealthStatus, PoolConfig, Result,
 };
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
+use sqlx::{MySql, Transaction as SqlxTransaction};
 
 #[derive(Debug)]
 pub struct Database {
@@ -13,14 +14,66 @@ pub struct Database {
 
 impl Database {
     pub async fn connect(url: &str) -> Result<Self> {
-        let pool = MySqlPoolOptions::new()
-            .max_connections(10)
-            .connect(url)
-            .await
-            .map_err(|e| DbError::Connection {
-                message: e.to_string(),
-            })?;
+        Self::connect_with(url, PoolConfig::default()).await
+    }
+
+    pub async fn connect_with(url: &str, config: PoolConfig) -> Result<Self> {
+        config.validate()?;
+
+        let mut opts = MySqlPoolOptions::new()
+            .max_connections(config.max_connections)
+            .min_connections(config.min_connections)
+            .acquire_timeout(Duration::from_millis(config.acquire_timeout_ms));
+
+        if config.max_lifetime_secs > 0 {
+            opts = opts.max_lifetime(Some(Duration::from_secs(config.max_lifetime_secs)));
+        }
+        if config.idle_timeout_secs > 0 {
+            opts = opts.idle_timeout(Some(Duration::from_secs(config.idle_timeout_secs)));
+        }
+
+        let pool = match tokio::time::timeout(
+            Duration::from_millis(config.connect_timeout_ms),
+            opts.connect(url),
+        )
+        .await
+        {
+            Ok(Ok(pool)) => pool,
+            Ok(Err(e)) => {
+                return Err(DbError::Connection {
+                    message: e.to_string(),
+                });
+            }
+            Err(e) => {
+                return Err(DbError::Connection {
+                    message: format!(
+                        "connect timed out after {} ms: {e}",
+                        config.connect_timeout_ms
+                    ),
+                });
+            }
+        };
+
         Ok(Self { pool })
+    }
+
+    pub async fn from_env() -> Result<Self> {
+        let _ = dotenvy::dotenv();
+        let url = match std::env::var("DATABASE_URL") {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(DbError::MissingEnv {
+                    name: format!("DATABASE_URL ({e})"),
+                });
+            }
+        };
+        Self::connect_with(&url, PoolConfig::from_env()?).await
+    }
+
+    pub async fn begin(&self) -> Result<SqlxTransaction<'_, MySql>> {
+        self.pool.begin().await.map_err(|e| DbError::Database {
+            message: e.to_string(),
+        })
     }
 
     #[must_use]
@@ -40,7 +93,7 @@ impl Database {
 
 #[async_trait::async_trait]
 impl HealthCheck for Database {
-    async fn health(&self) -> Result<Json> {
+    async fn health(&self) -> Result<HealthDetails> {
         let start = Instant::now();
         let timeout = Duration::from_millis(HEALTH_TIMEOUT_MS);
         let result = tokio::time::timeout(
@@ -51,11 +104,16 @@ impl HealthCheck for Database {
 
         let latency_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
-        let details = match result {
+        Ok(match result {
             Ok(Ok(row)) => {
                 let version: String = sqlx::Row::try_get(&row, 0).unwrap_or_default();
+                let status = if latency_ms > HEALTH_TIMEOUT_MS / 2 {
+                    HealthStatus::Degraded
+                } else {
+                    HealthStatus::Healthy
+                };
                 HealthDetails {
-                    status: HealthStatus::Healthy,
+                    status,
                     latency_ms,
                     server_version: version,
                     message: None,
@@ -75,15 +133,13 @@ impl HealthCheck for Database {
                     "health check timed out after {HEALTH_TIMEOUT_MS} ms"
                 )),
             },
-        };
-
-        json::to_json(&details)
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl DatabaseInfoProvider for Database {
-    async fn info(&self) -> Result<Json> {
+    async fn info(&self) -> Result<DatabaseInfo> {
         let row = sqlx::query("SELECT DATABASE(), VERSION()")
             .fetch_one(&self.pool)
             .await
@@ -99,46 +155,37 @@ impl DatabaseInfoProvider for Database {
         })?;
 
         let idle = u32::try_from(self.pool.num_idle()).unwrap_or(0);
-        let info = DatabaseInfo {
+        Ok(DatabaseInfo {
             database_name,
             server_version,
             pool_size: self.pool.size(),
             pool_idle: idle,
             active_connections: self.pool.size().saturating_sub(idle),
-        };
-        json::to_json(&info)
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl Connection for Database {
-    async fn ping(&self) -> Result<Json> {
-        let _ = sqlx::query("SELECT 1")
+    async fn ping(&self) -> Result<()> {
+        sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
+            .map(|_| ())
             .map_err(|e| DbError::Connection {
                 message: e.to_string(),
-            })?;
-        Ok(json::empty_object())
+            })
     }
 
-    async fn version(&self) -> Result<Json> {
+    async fn version(&self) -> Result<String> {
         let row = sqlx::query("SELECT VERSION()")
             .fetch_one(&self.pool)
             .await
             .map_err(|e| DbError::Query {
                 message: e.to_string(),
             })?;
-        let version: String = sqlx::Row::try_get(&row, 0).map_err(|e| DbError::Query {
+        sqlx::Row::try_get(&row, 0).map_err(|e| DbError::Query {
             message: e.to_string(),
-        })?;
-        Ok(serde_json::json!({ "version": version }))
-    }
-
-    async fn begin(&self) -> Result<Box<dyn Transaction>> {
-        let tx = self.pool.begin().await.map_err(|e| DbError::Database {
-            message: e.to_string(),
-        })?;
-        Ok(Box::new(crate::transaction::MySqlTransaction::new(tx)))
+        })
     }
 }
