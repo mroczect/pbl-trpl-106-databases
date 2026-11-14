@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 
-use crate::{Json, Result};
+use crate::types::core::DatabaseInfo;
+use crate::Result;
 
 #[async_trait]
 pub trait DatabaseInfoProvider: Send + Sync {
-    async fn info(&self) -> Result<Json>;
+    /// Return database metadata: name, version, and pool statistics.
+    async fn info(&self) -> Result<DatabaseInfo>;
 }

@@ -4,6 +4,6 @@ pub use db_core::Database;
 
 pub use db_handler::{
     json, prelude, Connection, DatabaseInfo, DatabaseInfoProvider, DbError, HealthCheck,
-    HealthDetails, HealthStatus, Id, Json, PageMeta, PageRequest, Paginated, Repository, Result,
-    SortDirection, Transaction,
+    HealthDetails, HealthStatus, Json, PageMeta, PageRequest, Paginated, PoolConfig, Result,
+    SortDirection,
 };

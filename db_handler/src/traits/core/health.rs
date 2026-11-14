@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 
-use crate::{Json, Result};
+use crate::types::core::HealthDetails;
+use crate::Result;
 
 #[async_trait]
 pub trait HealthCheck: Send + Sync {
-    async fn health(&self) -> Result<Json>;
+    async fn health(&self) -> Result<HealthDetails>;
 }

@@ -6,10 +6,7 @@
 )]
 
 use db_core::Database;
-use db_handler::{
-    json::from_json, Connection, DatabaseInfo, DatabaseInfoProvider, HealthCheck, HealthDetails,
-    HealthStatus, Json,
-};
+use db_handler::{Connection, DatabaseInfoProvider, HealthCheck, HealthStatus};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{Executor, MySqlPool};
 
@@ -52,10 +49,10 @@ async fn table_exists(admin: &MySqlPool, db: &str, table: &str) -> bool {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn full_lifecycle_with_traits() {
     let admin = admin_pool().await;
 
-    // [0] pre-cleanup
     admin
         .execute(format!("DROP DATABASE IF EXISTS {TEST_DB}").as_str())
         .await
@@ -63,7 +60,6 @@ async fn full_lifecycle_with_traits() {
     assert!(!db_exists(&admin, TEST_DB).await);
     println!("[0] pre-cleanup OK");
 
-    // [1] CREATE DATABASE
     admin
         .execute(format!("CREATE DATABASE {TEST_DB}").as_str())
         .await
@@ -71,12 +67,10 @@ async fn full_lifecycle_with_traits() {
     assert!(db_exists(&admin, TEST_DB).await);
     println!("[1] CREATE DATABASE OK");
 
-    // [2] Database::connect + Connection::ping
     let db = Database::connect(&test_db_url()).await.expect("connect");
     db.ping().await.expect("ping");
     println!("[2] Database::connect + Connection::ping OK");
 
-    // [3] CREATE TABLE
     sqlx::query(
         r"
         CREATE TABLE users (
@@ -92,52 +86,49 @@ async fn full_lifecycle_with_traits() {
     assert!(table_exists(&admin, TEST_DB, "users").await);
     println!("[3] CREATE TABLE OK");
 
-    // [4] HealthCheck::health
-    let health: HealthDetails = from_json(&db.health().await.expect("health")).expect("parse");
+    let health = db.health().await.expect("health");
     assert_eq!(health.status, HealthStatus::Healthy);
     assert!(!health.server_version.is_empty());
     println!(
-        "[4] HealthCheck::health OK — latency={} ms, version={}",
+        "[4] HealthCheck::health OK - latency={} ms, version={}",
         health.latency_ms, health.server_version
     );
 
-    // [5] DatabaseInfoProvider::info
-    let info: DatabaseInfo = from_json(&db.info().await.expect("info")).expect("parse");
+    let info = db.info().await.expect("info");
     assert_eq!(info.database_name, TEST_DB);
     assert!(!info.server_version.is_empty());
     println!(
-        "[5] DatabaseInfoProvider::info OK — db={}, pool_size={}, idle={}",
+        "[5] DatabaseInfoProvider::info OK - db={}, pool_size={}, idle={}",
         info.database_name, info.pool_size, info.pool_idle
     );
 
-    // [6] Connection::version
-    let version_json = db.version().await.expect("version");
-    let version = version_json
-        .get("version")
-        .and_then(Json::as_str)
-        .expect("version field");
+    let version = db.version().await.expect("version");
     assert!(!version.is_empty());
-    println!("[6] Connection::version OK — {version}");
+    println!("[6] Connection::version OK - {version}");
 
-    // [7] Transaction::rollback
-    db.begin()
+    {
+        let mut tx = db.begin().await.expect("begin");
+        sqlx::query("INSERT INTO users (name, email) VALUES (?, ?)")
+            .bind("Temp")
+            .bind("temp@example.com")
+            .execute(&mut *tx)
+            .await
+            .expect("insert in tx");
+        tx.rollback().await.expect("rollback");
+    }
+    let (count_after_rollback,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(db.pool())
         .await
-        .expect("begin")
-        .rollback()
-        .await
-        .expect("rollback");
-    println!("[7] Transaction::rollback OK");
+        .expect("count after rollback");
+    assert_eq!(count_after_rollback, 0, "rollback must discard INSERT");
+    println!("[7] transaction rollback OK - count={count_after_rollback}");
 
-    // [8] Transaction::commit
-    db.begin()
-        .await
-        .expect("begin")
-        .commit()
-        .await
-        .expect("commit");
-    println!("[8] Transaction::commit OK");
+    {
+        let tx = db.begin().await.expect("begin");
+        tx.commit().await.expect("commit");
+    }
+    println!("[8] transaction commit OK");
 
-    // [9] INSERT + COUNT
     sqlx::query("INSERT INTO users (name, email) VALUES (?, ?)")
         .bind("Alice")
         .bind("alice@example.com")
@@ -149,9 +140,8 @@ async fn full_lifecycle_with_traits() {
         .await
         .expect("count");
     assert_eq!(count, 1);
-    println!("[9] INSERT + COUNT OK — {count}");
+    println!("[9] INSERT + COUNT OK - {count}");
 
-    // [10] UNIQUE constraint
     let dup = sqlx::query("INSERT INTO users (name, email) VALUES (?, ?)")
         .bind("Bob")
         .bind("alice@example.com")
@@ -160,7 +150,6 @@ async fn full_lifecycle_with_traits() {
     assert!(dup.is_err());
     println!("[10] UNIQUE constraint OK");
 
-    // [11] DROP TABLE
     sqlx::query("DROP TABLE users")
         .execute(db.pool())
         .await
@@ -168,11 +157,9 @@ async fn full_lifecycle_with_traits() {
     assert!(!table_exists(&admin, TEST_DB, "users").await);
     println!("[11] DROP TABLE OK");
 
-    // [12] Close pool sebelum DROP DATABASE (wajib — MySQL menolak drop jika masih ada koneksi aktif)
     db.close().await;
     println!("[12] Database closed OK");
 
-    // [13] DROP DATABASE
     admin
         .execute(format!("DROP DATABASE {TEST_DB}").as_str())
         .await
@@ -180,7 +167,6 @@ async fn full_lifecycle_with_traits() {
     assert!(!db_exists(&admin, TEST_DB).await);
     println!("[13] DROP DATABASE OK");
 
-    // [14] Close admin pool
     admin.close().await;
     println!("[14] admin closed OK");
 }
