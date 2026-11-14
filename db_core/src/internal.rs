@@ -11,17 +11,19 @@ pub(crate) async fn exec_raw_text(
     conn: PoolConnection<MySql>,
     sql: String,
 ) -> Result<PoolConnection<MySql>> {
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         let mut conn = conn;
-        sqlx::raw_sql(&sql)
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok::<_, String>(conn)
+        pollster::block_on(async {
+            sqlx::raw_sql(&sql)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok::<_, String>(conn)
+        })
     })
     .await
     .map_err(|e| DbError::Database {
-        message: format!("raw SQL task failed: {e}"),
+        message: format!("spawn_blocking join error: {e}"),
     })?
     .map_err(|e| DbError::Database { message: e })
 }

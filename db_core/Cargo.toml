@@ -19,6 +19,7 @@ db_handler = { version = "0.1.0", path = "../db_handler" }
 dotenvy = "0.15.7"
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "mysql", "tls-rustls", "macros", "migrate", "chrono"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "time"] }
+pollster = "0.4"
 
 [lints]
 workspace = true
