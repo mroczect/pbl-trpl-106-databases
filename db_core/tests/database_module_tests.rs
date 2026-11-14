@@ -75,6 +75,9 @@ async fn setup_table(prefix: &str) -> (Database, String) {
             age INT NULL
         )"
     );
+    let _ = sqlx::query(&format!("DROP TABLE IF EXISTS `{table}`"))
+        .execute(db.pool())
+        .await;
     sqlx::query(&sql)
         .execute(db.pool())
         .await
