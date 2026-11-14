@@ -12,8 +12,9 @@ pub(crate) async fn exec_raw_text(
     sql: String,
 ) -> Result<PoolConnection<MySql>> {
     tokio::spawn(async move {
+        let mut conn = conn;
         sqlx::raw_sql(&sql)
-            .execute(&mut conn)
+            .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
         Ok::<_, String>(conn)
